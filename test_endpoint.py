@@ -4,14 +4,14 @@ import json
 url = "http://localhost:7500/analyze-statements/"
 
 payload = {
-    "bank_names": ["HDFC"],
-    "pdf_paths": ["/Users/sanchaythalnerkar/CypherSol/accountant/banks/hdfc.pdf"],
+    "bank_names": ["AXIS"],
+    "pdf_paths": ["Axis bank AC statement.pdf"],
     "passwords": [
         "",
     ],
-    "start_date": ["26-01-2024"],
-    "end_date": ["26-02-2024"],
-    "ca_id": "HDFC",
+    "start_date": ["01-04-2000"],
+    "end_date": ["31-03-2025"],
+    "ca_id": "HDFC_1234",
 }
 
 try:

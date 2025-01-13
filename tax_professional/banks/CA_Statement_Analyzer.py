@@ -13,6 +13,7 @@ pd.set_option("display.max_rows", None)
 pd.set_option("display.width", None)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../..")))
+import json
 
 from common_functions import CommonFunctions
 
@@ -283,6 +284,100 @@ class CABankStatement:
         )
 
         return loan_value_df
+
+    # Main processing logic
+    def process_excel_to_json(self, excel_file):
+        output_file = "excel_to_json.json"
+        """
+        Processes an Excel workbook and converts it to JSON format.
+        """
+
+        # Function to make column names unique globally
+        def make_columns_unique(columns):
+            seen = set()
+            unique_columns = []
+            for col in columns:
+                if col in seen:
+                    count = 1
+                    new_col = f"{col}_{count}"
+                    while new_col in seen:
+                        count += 1
+                        new_col = f"{col}_{count}"
+                    unique_columns.append(new_col)
+                    seen.add(new_col)
+                else:
+                    unique_columns.append(col)
+                    seen.add(col)
+            return unique_columns
+
+        # Function to process the "Summary" sheet
+        def summary_to_json(df):
+            tables = {}
+            current_table_data = []
+            table_count = 0
+
+            # Iterate through rows to extract tables
+            for index, row in df.iterrows():
+                if row.isnull().all():  # Blank row indicates the end of a table
+                    if current_table_data:  # Process the current table if data exists
+                        table_count += 1
+                        table_df = pd.DataFrame(current_table_data)
+                        table_df.columns = make_columns_unique(table_df.iloc[0])  # Use the first row as headers
+                        table_df = table_df[1:]  # Remove the headers from the data
+                        table_df.reset_index(drop=True, inplace=True)
+                        tables[f"Table {table_count}"] = json.loads(table_df.to_json(orient="records"))
+                        current_table_data = []  # Reset for the next table
+                else:
+                    current_table_data.append(row)
+
+            # Process the last table if it exists
+            if current_table_data:
+                table_count += 1
+                table_df = pd.DataFrame(current_table_data)
+                table_df.columns = make_columns_unique(table_df.iloc[0])  # Use the first row as headers
+                table_df = table_df[1:]  # Remove the headers from the data
+                table_df.reset_index(drop=True, inplace=True)
+                tables[f"Table {table_count}"] = json.loads(table_df.to_json(orient="records"))
+
+            return tables
+
+        """ 
+        Args:
+            excel_file (str): Path to the Excel workbook.
+            output_file (str): Path to save the output JSON file.
+        """
+        excel_data = pd.ExcelFile(excel_file)
+        result = {}
+
+        # Process each sheet
+        for sheet_name in excel_data.sheet_names:
+            df = excel_data.parse(sheet_name, header=None)  # Load without headers
+
+            if sheet_name == "Summary":  # Special case for the "Summary" sheet
+                result[sheet_name] = summary_to_json(df)
+            else:  # Process other sheets
+                tables = []
+                headers = df.iloc[0]  # First row is the header
+                df = df[1:]  # Remove the header row from the data
+                headers = headers.fillna(f"Unnamed_{len(headers)}")  # Fill NaNs in headers
+                df.columns = make_columns_unique(headers)  # Ensure unique column names
+                tables.append(df)
+
+                # Process tables and add to JSON with table names
+                sheet_result = {}
+                for index, table in enumerate(tables):
+                    table.reset_index(drop=True, inplace=True)
+                    index_plus_one = f"Table {index + 1}"
+                    sheet_result[index_plus_one] = json.loads(table.to_json(orient='records'))
+
+                result[sheet_name] = sheet_result
+
+        # Convert the result dictionary to JSON
+        final_json = json.dumps(result, indent=4)
+
+        print(f"JSON output generated")
+
+        return final_json
 
     # @timer_decorator
     def start_extraction(self):
@@ -634,6 +729,8 @@ class CABankStatement:
 
         reorder_sheets(filename)
 
+        output_json = self.process_excel_to_json(filename)
+
         folder_path = "saved_pdf"
         try:
             shutil.rmtree(folder_path)
@@ -641,7 +738,7 @@ class CABankStatement:
         except Exception as e:
             print(f"Failed to remove '{folder_path}': {e}")
 
-        return (self.account_number, self.current_progress)
+        return output_json
 
 
 ### --------------------------------------------------------------------------------------------------------- ###

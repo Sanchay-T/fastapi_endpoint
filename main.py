@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 
 # If you have other custom imports:
-from tax_professional.banks.CA_Statement_Analyzer import CABankStatement
+from tax_professional.banks.CA_Statement_Analyzer import start_extraction_add_pdf
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -50,24 +50,24 @@ async def analyze_bank_statements(request: BankStatementRequest):
 
         logger.info("Initializing CABankStatement")
         # Pass empty list if no passwords
-        converter = CABankStatement(
-            request.bank_names,
-            request.pdf_paths,
-            request.passwords if request.passwords else [],
-            request.start_date,
-            request.end_date,
-            request.ca_id,
-            progress_data,
-        )
+
+        bank_names = request.bank_names
+        pdf_paths = request.pdf_paths
+        passwords =  request.passwords if request.passwords else []
+        start_date = request.start_date
+        end_date = request.end_date
+        CA_ID = request.ca_id
+        progress_data = progress_data
 
         logger.info("Starting extraction")
-        result = converter.start_extraction()
-
+        result = start_extraction_add_pdf(bank_names, pdf_paths, passwords, start_date, end_date, CA_ID, progress_data)
+        print("RESULT GENERATED")
         logger.info("Extraction completed successfully")
         return {
             "status": "success",
             "message": "Bank statements analyzed successfully",
-            "data": result,
+            "data": result["sheets_in_json"],
+            "pdf_paths_not_extracted": result["pdf_paths_not_extracted"],
         }
 
     except Exception as e:

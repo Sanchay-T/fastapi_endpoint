@@ -1,11 +1,12 @@
 import shutil
 import os
-import pandas as pd
+from lib2to3.pytree import convert
 from openpyxl.styles import Font
 import logging
 from openpyxl import Workbook, load_workbook
 import sys
-
+import json
+import pandas as pd
 bold_font = Font(bold=True)
 pd.options.display.float_format = "{:,.2f}".format
 pd.set_option("display.max_columns", None)
@@ -13,39 +14,315 @@ pd.set_option("display.max_rows", None)
 pd.set_option("display.width", None)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../..")))
-import json
 
-from common_functions import CommonFunctions
+from common_functions import (process_excel_to_json,process_name_n_num_df,category_add_ca,
+                              another_method,eod,opening_and_closing_bal,summary_sheet,
+                              transaction_sheet,total_investment,redemption_investment,
+                              creditor_list,debtor_list, cash_withdraw, cash_depo, div_int, emi,
+                              refund_reversal, suspense_credit, suspense_debit, payment,receipt,
+                              calculate_fixed_day_average, process_avg_last_6_months, extraction_process,
+                              color_summary_sheet, format_numbers_with_commas, adjust_column_widths_for_varied_sheets,
+                              Summary_note, Investment_note, CreditorList_note, DebtorList_note, CashWithdrawalt_note,
+                              Cash_Deposit_note, Emi_note, Refund_note, Suspense_Credit_note, Suspense_Debit_note,
+                              add_filters_to_excel, create_excel_sheet, color_excel_tabs_inplace, sort_dataframes_by_date,
+                              extraction_process_explicit_lines)
+
+def reconstruct_dict_from_json_save_to_excel(json_input, account_number, CA_ID):
+    """
+    Reconstructs the results dictionary from a JSON object.
+
+    Args:
+        json_input (str): A JSON-formatted string representing the results.
+
+    Returns:
+        dict: A dictionary where each key is a category and each value is a DataFrame.
+    """
+    # Parse the JSON string into a Python dictionary
+    parsed_data = json.loads(json_input)
+
+    # Initialize an empty dictionary to hold the DataFrames
+    results = {}
+
+    # Iterate through each key-value pair in the parsed data
+    for key, records in parsed_data.items():
+        # Convert the list of records into a Pandas DataFrame
+        results[key] = pd.DataFrame(records)
+
+    # Reconstruct all the DataFrames from the results dictionary
+    name_n_num_df = results["Name Acc No"]
+    particulars_df = results["Particulars"]
+    income_receipts_df = results["Income Receipts"]
+    imp_expenses_payments_df = results["Important Expenses"]
+    other_expenses_df = results["Other Expenses"]
+    loan_value_df = results["Opportunity to Earn"]
+    transaction_sheet_df = results["Transactions"]
+    eod_sheet_df = results["EOD"]
+    investment_df = results["Investment"]
+    creditor_df = results["Creditors"]
+    debtor_df = results["Debtors"]
+    upi_cr_df = results["UPI-CR"]
+    upi_dr_df = results["UPI-DR"]
+    cash_withdrawal_df = results["Cash Withdrawal"]
+    cash_deposit_df = results["Cash Deposit"]
+    dividend_int_df = results["Redemption, Dividend & Interest"]
+    emi_df = results["Probable EMI"]
+    refund_df = results["Refund-Reversal"]
+    suspense_credit_df = results["Suspense Credit"]
+    suspense_debit_df = results["Suspense Debit"]
+    payment_df = results["Payment Voucher"]
+    receipt_df = results["Receipt Voucher"]
+
+    # All sheets are now restored as Pandas DataFrames
+
+    filename = os.path.join(
+        "saved_excel",
+        f"{CA_ID}_extracted_statements_file_{account_number}.xlsx",
+    )
+
+    writer = pd.ExcelWriter(filename, engine="xlsxwriter")
+
+    #start converting to excel
+    sheet_name = "Summary"
+    name_n_num_df.to_excel(writer, sheet_name=sheet_name, index=False)
+
+    particulars_df.to_excel(
+        writer,
+        sheet_name=sheet_name,
+        startrow=name_n_num_df.shape[0] + 2,
+        index=False,
+    )
+    income_receipts_df.to_excel(
+        writer,
+        sheet_name=sheet_name,
+        startrow=name_n_num_df.shape[0] + particulars_df.shape[0] + 4,
+        index=False,
+    )
+    imp_expenses_payments_df.to_excel(
+        writer,
+        sheet_name=sheet_name,
+        startrow=name_n_num_df.shape[0]
+                 + particulars_df.shape[0]
+                 + income_receipts_df.shape[0]
+                 + 6,
+        index=False,
+    )
+    other_expenses_df .to_excel(
+        writer,
+        sheet_name=sheet_name,
+        startrow=name_n_num_df.shape[0]
+                 + particulars_df.shape[0]
+                 + income_receipts_df.shape[0]
+                 + imp_expenses_payments_df.shape[0]
+                 + 8,
+        index=False,
+    )
+
+    loan_value_df.to_excel(writer, sheet_name='Opportunity to Earn', index=False)
+    transaction_sheet_df.to_excel(writer, sheet_name='Transactions', index=False)
+    eod_sheet_df.to_excel(writer, sheet_name='EOD', index=False)
+    investment_df.to_excel(writer, sheet_name='Investment', index=False)
+    creditor_df.to_excel(writer, sheet_name='Creditors', index=False)
+    debtor_df.to_excel(writer, sheet_name='Debtors', index=False)
+    upi_cr_df.to_excel(writer, sheet_name='UPI-CR', index=False)
+    upi_dr_df.to_excel(writer, sheet_name='UPI-DR', index=False)
+    cash_withdrawal_df.to_excel(writer, sheet_name='Cash Withdrawal', index=False)
+    cash_deposit_df.to_excel(writer, sheet_name='Cash Deposit', index=False)
+    dividend_int_df.to_excel(writer, sheet_name='Redemption, Dividend & Interest', index=False)
+    emi_df.to_excel(writer, sheet_name='Probable EMI', index=False)
+    refund_df.to_excel(writer, sheet_name='Refund-Reversal', index=False)
+    suspense_credit_df.to_excel(writer, sheet_name='Suspense Credit', index=False)
+    suspense_debit_df.to_excel(writer, sheet_name='Suspense Debit', index=False)
+    payment_df.to_excel(writer, sheet_name='Payment Voucher', index=False)
+    receipt_df.to_excel(writer, sheet_name='Receipt Voucher', index=False)
+    writer._save()
+    writer.close()
+    return filename
 
 
-class CABankStatement:
-    def __init__(
-        self,
-        bank_names,
-        pdf_paths,
-        pdf_passwords,
-        start_date,
-        end_date,
-        CA_ID,
-        progress_data,
-    ):
-        self.writer = None
-        self.bank_names = bank_names
-        self.pdf_paths = pdf_paths
-        self.pdf_passwords = pdf_passwords
-        self.start_date = start_date
-        self.end_date = end_date
-        self.account_number = ""
-        self.file_name = None
-        self.CA_ID = CA_ID
-        self.commoner = CommonFunctions(
-            bank_names, pdf_paths, pdf_passwords, start_date, end_date, CA_ID
-        )
-        self.progress_function = progress_data.get("progress_func")
-        self.current_progress = progress_data.get("current_progress")
-        self.total_progress = progress_data.get("total_progress")
+def returns_json_output_of_all_sheets(df, name_n_num_df):
+    # Generate all necessary DataFrames
+    eod_sheet_df = eod(df)
+    opening_bal, closing_bal = opening_and_closing_bal(eod_sheet_df, df)
 
-    def CA_Bank_statement(self, filename, dfs, name_dfs):
+    summary_df_list = summary_sheet(df, opening_bal, closing_bal, df)
+
+    particulars_df = summary_df_list[0]
+    income_receipts_df = summary_df_list[1]
+    imp_expenses_payments_df = summary_df_list[2]
+    other_expenses_df = summary_df_list[3]
+
+    df['Value Date'] = pd.to_datetime(df['Value Date']).dt.strftime('%d-%m-%Y')
+    transaction_sheet_df = transaction_sheet(df)
+    investment_df = total_investment(df)
+    creditor_df = creditor_list(df)
+    debtor_df = debtor_list(transaction_sheet_df)
+
+    upi_cr_df = df[(df["Description"].str.contains("UPI", case=False)) & (df["Credit"] > 0)]
+    upi_dr_df = df[(df["Description"].str.contains("UPI", case=False)) & (df["Debit"] > 0)]
+
+    cash_withdrawal_df = cash_withdraw(df)
+    cash_deposit_df = cash_depo(df)
+    dividend_int_df = div_int(df)
+    emi_df = emi(df)
+    refund_df = refund_reversal(df)
+    suspense_credit_df = suspense_credit(df)
+    suspense_debit_df = suspense_debit(df)
+    payment_df = payment(df)
+    receipt_df = receipt(df)
+
+    bank_avg_balance_df = calculate_fixed_day_average(eod_sheet_df)
+    loan_value_df = process_avg_last_6_months(bank_avg_balance_df, eod_sheet_df)
+
+    # Build a dictionary to hold the labeled DataFrames
+    result_dict = {
+        "Name Acc No": name_n_num_df.to_dict(orient="records"),
+        "Particulars": particulars_df.to_dict(orient="records"),
+        "Income Receipts": income_receipts_df.to_dict(orient="records"),
+        "Important Expenses": imp_expenses_payments_df.to_dict(orient="records"),
+        "Other Expenses": other_expenses_df.to_dict(orient="records"),
+        "Opportunity to Earn": loan_value_df.to_dict(orient="records"),
+        "Transactions": transaction_sheet_df.to_dict(orient="records"),
+        "EOD": eod_sheet_df.to_dict(orient="records"),
+        "Investment": investment_df.to_dict(orient="records"),
+        "Creditors": creditor_df.to_dict(orient="records"),
+        "Debtors": debtor_df.to_dict(orient="records"),
+        "UPI-CR": upi_cr_df.to_dict(orient="records"),
+        "UPI-DR": upi_dr_df.to_dict(orient="records"),
+        "Cash Withdrawal": cash_withdrawal_df.to_dict(orient="records"),
+        "Cash Deposit": cash_deposit_df.to_dict(orient="records"),
+        "Redemption, Dividend & Interest": dividend_int_df.to_dict(orient="records"),
+        "Probable EMI": emi_df.to_dict(orient="records"),
+        "Refund-Reversal": refund_df.to_dict(orient="records"),
+        "Suspense Credit": suspense_credit_df.to_dict(orient="records"),
+        "Suspense Debit": suspense_debit_df.to_dict(orient="records"),
+        "Payment Voucher": payment_df.to_dict(orient="records"),
+        "Receipt Voucher": receipt_df.to_dict(orient="records"),
+    }
+
+    # Convert the entire dictionary to JSON
+    json_output = json.dumps(result_dict, indent=4)
+    with open("new_output.json", "w") as file:
+        file.write(json_output)
+    return json_output
+
+
+def refresh_category_all_sheets(df, eod_sheet_df):
+
+    opening_bal, closing_bal = opening_and_closing_bal(eod_sheet_df, df)
+
+    summary_df_list = summary_sheet(df, opening_bal, closing_bal, df)
+
+    particulars_df = summary_df_list[0]
+    income_receipts_df = summary_df_list[1]
+    imp_expenses_payments_df = summary_df_list[2]
+    other_expenses_df = summary_df_list[3]
+
+    df['Value Date'] = pd.to_datetime(df['Value Date']).dt.strftime('%d-%m-%Y')
+    transaction_sheet_df = transaction_sheet(df)
+    investment_df = total_investment(df)
+    creditor_df = creditor_list(df)
+    debtor_df = debtor_list(transaction_sheet_df)
+
+    upi_cr_df = df[(df["Description"].str.contains("UPI", case=False)) & (df["Credit"] > 0)]
+    upi_dr_df = df[(df["Description"].str.contains("UPI", case=False)) & (df["Debit"] > 0)]
+
+    cash_withdrawal_df = cash_withdraw(df)
+    cash_deposit_df = cash_depo(df)
+    dividend_int_df = div_int(df)
+    emi_df = emi(df)
+    refund_df = refund_reversal(df)
+    suspense_credit_df = suspense_credit(df)
+    suspense_debit_df = suspense_debit(df)
+    payment_df = payment(df)
+    receipt_df = receipt(df)
+
+    bank_avg_balance_df = calculate_fixed_day_average(eod_sheet_df)
+    loan_value_df = process_avg_last_6_months(bank_avg_balance_df, eod_sheet_df)
+
+    # Build a dictionary to hold the labeled DataFrames
+    result_dict = {
+        # "Name Acc No": name_n_num_df.to_dict(orient="records"),
+        "Particulars": particulars_df.to_dict(orient="records"),
+        "Income Receipts": income_receipts_df.to_dict(orient="records"),
+        "Important Expenses": imp_expenses_payments_df.to_dict(orient="records"),
+        "Other Expenses": other_expenses_df.to_dict(orient="records"),
+        "Opportunity to Earn": loan_value_df.to_dict(orient="records"),
+        "Transactions": transaction_sheet_df.to_dict(orient="records"),
+        "EOD": eod_sheet_df.to_dict(orient="records"),
+        "Investment": investment_df.to_dict(orient="records"),
+        "Creditors": creditor_df.to_dict(orient="records"),
+        "Debtors": debtor_df.to_dict(orient="records"),
+        "UPI-CR": upi_cr_df.to_dict(orient="records"),
+        "UPI-DR": upi_dr_df.to_dict(orient="records"),
+        "Cash Withdrawal": cash_withdrawal_df.to_dict(orient="records"),
+        "Cash Deposit": cash_deposit_df.to_dict(orient="records"),
+        "Redemption, Dividend & Interest": dividend_int_df.to_dict(orient="records"),
+        "Probable EMI": emi_df.to_dict(orient="records"),
+        "Refund-Reversal": refund_df.to_dict(orient="records"),
+        "Suspense Credit": suspense_credit_df.to_dict(orient="records"),
+        "Suspense Debit": suspense_debit_df.to_dict(orient="records"),
+        "Payment Voucher": payment_df.to_dict(orient="records"),
+        "Receipt Voucher": receipt_df.to_dict(orient="records"),
+    }
+
+    # Convert the entire dictionary to JSON
+    json_output = json.dumps(result_dict, indent=4)
+
+    return json_output
+
+
+def start_extraction_edit_pdf(bank_names, pdf_paths, passwords, start_dates, end_dates, CA_ID, progress_data, explicit_lines_list, whole_transaction_sheet=None):
+    account_number = ""
+    dfs = {}
+    name_dfs = {}
+    pdf_paths_not_extracted = {
+        "paths": [],
+        "passwords": [],
+        "start_dates": [],
+        "end_dates": [],
+        "respective_list_of_columns": []
+    }
+    i = 0
+
+    for bank in bank_names:
+        bank = str(f"{bank}{i}")
+        pdf_path = pdf_paths[i]
+        pdf_password = passwords[i]
+        start_date = start_dates[i]
+        end_date = end_dates[i]
+        explicit_lines = explicit_lines_list[i]
+
+        dfs[bank], name_dfs[bank] = extraction_process_explicit_lines(bank, pdf_path, pdf_password, start_date, end_date, explicit_lines)
+
+        print(f"Extracted {bank} bank statement successfully")
+        # account_number += f"{name_dfs[bank][1][:4]}x{name_dfs[bank][1][-4:]}_"
+        # Check if the extracted dataframe is empty
+        if dfs[bank].empty:
+            pdf_paths_not_extracted["paths"].append(pdf_path)
+            pdf_paths_not_extracted["passwords"].append(pdf_password)
+            pdf_paths_not_extracted["start_dates"].append(start_date)
+            pdf_paths_not_extracted["end_dates"].append(end_date)
+            pdf_paths_not_extracted["respective_list_of_columns"].append(name_dfs[bank])
+            del dfs[bank]
+            del name_dfs[bank]
+
+        i += 1
+
+    print("|------------------------------|")
+    print(account_number)
+    print("|------------------------------|")
+
+    if not dfs:
+        folder_path = "saved_pdf"
+        try:
+            shutil.rmtree(folder_path)
+            print(f"Removed all contents in '{folder_path}'")
+        except Exception as e:
+            print(f"Failed to remove '{folder_path}': {e}")
+
+        return {"sheets_in_json": None, 'pdf_paths_not_extracted': pdf_paths_not_extracted}
+
+    else:
         data = []
         # num_pairs = len(pd.Series(dfs).to_dict())
 
@@ -63,673 +340,25 @@ class CABankStatement:
                     character for character in item[2] if character.isalpha()
                 )
 
-        name_n_num_df = self.commoner.process_name_n_num_df(data)
+        name_n_num_df = process_name_n_num_df(data)
+        list_of_dataframes = list(dfs.values())
 
-        initial_df = pd.concat(list(dfs.values())).fillna("").reset_index(drop=True)
-        self.progress_function(
-            self.current_progress,
-            self.total_progress,
-            info=f"Categorizing transactions",
-        )
-        self.current_progress += 1
-        df = self.commoner.category_add_ca(initial_df)
-        new_tran_df = self.commoner.another_method(df)
+        if whole_transaction_sheet is not None:
+            list_of_dataframes.append(transaction_sheet)
 
-        eod_sheet_df = self.commoner.eod(df)
+        # arrange dfs
+        initial_df = pd.concat(sort_dataframes_by_date(list_of_dataframes)).fillna("").reset_index(drop=True)
 
-        opening_bal, closing_bal = self.commoner.opening_and_closing_bal(
-            eod_sheet_df, df
-        )
-        self.progress_function(
-            self.current_progress, self.total_progress, info=f"Generating summary sheet"
-        )
-        self.current_progress += 1
-        sheet_name = "Summary"
-        summary_df_list = self.commoner.summary_sheet(
-            df, opening_bal, closing_bal, new_tran_df
-        )
+        df = category_add_ca(initial_df)
+        new_tran_df = another_method(df)
 
-        name_n_num_df.to_excel(self.writer, sheet_name=sheet_name, index=False)
-        summary_df_list[0].to_excel(
-            self.writer,
-            sheet_name=sheet_name,
-            startrow=name_n_num_df.shape[0] + 2,
-            index=False,
-        )
-        summary_df_list[1].to_excel(
-            self.writer,
-            sheet_name=sheet_name,
-            startrow=name_n_num_df.shape[0] + summary_df_list[0].shape[0] + 4,
-            index=False,
-        )
-        summary_df_list[2].to_excel(
-            self.writer,
-            sheet_name=sheet_name,
-            startrow=name_n_num_df.shape[0]
-            + summary_df_list[0].shape[0]
-            + summary_df_list[1].shape[0]
-            + 6,
-            index=False,
-        )
-        summary_df_list[3].to_excel(
-            self.writer,
-            sheet_name=sheet_name,
-            startrow=name_n_num_df.shape[0]
-            + summary_df_list[0].shape[0]
-            + summary_df_list[1].shape[0]
-            + summary_df_list[2].shape[0]
-            + 8,
-            index=False,
-        )
+        #############################------------------------#######################################
 
-        self.progress_function(
-            self.current_progress,
-            self.total_progress,
-            info=f"Generating Transaction Sheet",
-        )
-        self.current_progress += 1
-        transaction_sheet_df = self.commoner.transaction_sheet(df)
-        transaction_sheet_df["Value Date"] = pd.to_datetime(
-            transaction_sheet_df["Value Date"]
-        ).dt.strftime("%d-%m-%Y")
+        json_lists_of_df = returns_json_output_of_all_sheets(new_tran_df, name_n_num_df)
+        # excel_file_path = reconstruct_dict_from_json_save_to_excel(json_lists_of_df, account_number, CA_ID)
+        # print(excel_file_path)
 
-        new_tran_df = self.commoner.another_method(transaction_sheet_df)
-        new_tran_df.to_excel(self.writer, sheet_name="Transactions", index=False)
-
-        self.progress_function(
-            self.current_progress,
-            self.total_progress,
-            info=f"Generating EOD Balance Sheet",
-        )
-        self.current_progress += 1
-        eod_sheet_df.to_excel(self.writer, sheet_name="EOD Balance", index=False)
-
-        self.progress_function(
-            self.current_progress,
-            self.total_progress,
-            info=f"Generating Investment Sheet",
-        )
-        self.current_progress += 1
-        investment_df = self.commoner.total_investment(new_tran_df)
-        investment_df.to_excel(self.writer, sheet_name="Investment", index=False)
-
-        # redemption_investment_df = self.commoner.redemption_investment(transaction_sheet_df)
-        # redemption_investment_df.to_excel(self.writer, sheet_name='Redemption of Investment', index=False)
-
-        self.progress_function(
-            self.current_progress,
-            self.total_progress,
-            info=f"Generating Creditors Sheet",
-        )
-        self.current_progress += 1
-        creditor_df = self.commoner.creditor_list(transaction_sheet_df)
-        creditor_df.to_excel(self.writer, sheet_name="Creditors", index=False)
-
-        self.progress_function(
-            self.current_progress, self.total_progress, info=f"Generating Debtors Sheet"
-        )
-        self.current_progress += 1
-        debtor_df = self.commoner.debtor_list(transaction_sheet_df)
-        debtor_df.to_excel(self.writer, sheet_name="Debtors", index=False)
-
-        self.progress_function(
-            self.current_progress, self.total_progress, info=f"Generating UPI-CR Sheet"
-        )
-        self.current_progress += 1
-        upi_cr_df = transaction_sheet_df[
-            (transaction_sheet_df["Description"].str.contains("UPI", case=False))
-            & (transaction_sheet_df["Credit"] > 0)
-        ]
-        upi_cr_df.to_excel(self.writer, sheet_name="UPI-CR", index=False)
-
-        # Create UPI-DR sheet
-        self.progress_function(
-            self.current_progress, self.total_progress, info=f"Generating UPI-DR Sheet"
-        )
-        self.current_progress += 1
-        upi_dr_df = transaction_sheet_df[
-            (transaction_sheet_df["Description"].str.contains("UPI", case=False))
-            & (transaction_sheet_df["Debit"] > 0)
-        ]
-        upi_dr_df.to_excel(self.writer, sheet_name="UPI-DR", index=False)
-
-        self.progress_function(
-            self.current_progress,
-            self.total_progress,
-            info=f"Generating Cash Withdrawal Sheet",
-        )
-        self.current_progress += 1
-        cash_withdrawal_df = self.commoner.cash_withdraw(new_tran_df)
-        cash_withdrawal_df.to_excel(
-            self.writer, sheet_name="Cash Withdrawal", index=False
-        )
-
-        self.progress_function(
-            self.current_progress,
-            self.total_progress,
-            info=f"Generating Cash Deposit Sheet",
-        )
-        self.current_progress += 1
-        cash_deposit_df = self.commoner.cash_depo(new_tran_df)
-        cash_deposit_df.to_excel(self.writer, sheet_name="Cash Deposit", index=False)
-
-        self.progress_function(
-            self.current_progress,
-            self.total_progress,
-            info=f"Generating Redemption, Dividend & Interest Sheet",
-        )
-        self.current_progress += 1
-        dividend_int_df = self.commoner.div_int(new_tran_df)
-        dividend_int_df.to_excel(
-            self.writer, sheet_name="Redemption, Dividend & Interest", index=False
-        )
-
-        self.progress_function(
-            self.current_progress,
-            self.total_progress,
-            info=f"Generating Probable EMI Sheet",
-        )
-        self.current_progress += 1
-        emi_df = self.commoner.emi(new_tran_df)
-        emi_df.to_excel(self.writer, sheet_name="Probable EMI", index=False)
-
-        self.progress_function(
-            self.current_progress,
-            self.total_progress,
-            info=f"Generating Refund-Reversal Sheet",
-        )
-        self.current_progress += 1
-        refund = self.commoner.refund_reversal(new_tran_df)
-        refund.to_excel(self.writer, sheet_name="Refund-Reversal", index=False)
-
-        self.progress_function(
-            self.current_progress,
-            self.total_progress,
-            info=f"Generating Suspense Credit Sheet",
-        )
-        self.current_progress += 1
-        suspense_credit_df = self.commoner.suspense_credit(new_tran_df)
-        suspense_credit_df.to_excel(
-            self.writer, sheet_name="Suspense Credit", index=False
-        )
-
-        self.progress_function(
-            self.current_progress,
-            self.total_progress,
-            info=f"Generating Suspense Debit Sheet",
-        )
-        self.current_progress += 1
-        suspense_debit_df = self.commoner.suspense_debit(new_tran_df)
-        suspense_debit_df.to_excel(
-            self.writer, sheet_name="Suspense Debit", index=False
-        )
-
-        self.progress_function(
-            self.current_progress, self.total_progress, info=f"Generating Payment Sheet"
-        )
-        self.current_progress += 1
-        Payment = self.commoner.payment(transaction_sheet_df)
-        Payment.to_excel(self.writer, sheet_name="Payment Voucher", index=False)
-
-        self.progress_function(
-            self.current_progress, self.total_progress, info=f"Generating Receipt Sheet"
-        )
-        self.current_progress += 1
-        Receipt = self.commoner.receipt(transaction_sheet_df)
-        Receipt.to_excel(self.writer, sheet_name="Receipt Voucher", index=False)
-
-        bank_avg_balance_df = self.commoner.calculate_fixed_day_average(eod_sheet_df)
-        loan_value_df = self.commoner.process_avg_last_6_months(
-            filename, bank_avg_balance_df, eod_sheet_df
-        )
-
-        return loan_value_df
-
-    # Main processing logic
-    def process_excel_to_json(self, excel_file):
-        output_file = "excel_to_json.json"
-        """
-        Processes an Excel workbook and converts it to JSON format.
-        """
-
-        # Function to make column names unique globally
-        def make_columns_unique(columns):
-            seen = set()
-            unique_columns = []
-            for col in columns:
-                if col in seen:
-                    count = 1
-                    new_col = f"{col}_{count}"
-                    while new_col in seen:
-                        count += 1
-                        new_col = f"{col}_{count}"
-                    unique_columns.append(new_col)
-                    seen.add(new_col)
-                else:
-                    unique_columns.append(col)
-                    seen.add(col)
-            return unique_columns
-
-        # Function to process the "Summary" sheet
-        def summary_to_json(df):
-            tables = {}
-            current_table_data = []
-            table_count = 0
-
-            # Iterate through rows to extract tables
-            for index, row in df.iterrows():
-                if row.isnull().all():  # Blank row indicates the end of a table
-                    if current_table_data:  # Process the current table if data exists
-                        table_count += 1
-                        table_df = pd.DataFrame(current_table_data)
-                        table_df.columns = make_columns_unique(table_df.iloc[0])  # Use the first row as headers
-                        table_df = table_df[1:]  # Remove the headers from the data
-                        table_df.reset_index(drop=True, inplace=True)
-                        tables[f"Table {table_count}"] = json.loads(table_df.to_json(orient="records"))
-                        current_table_data = []  # Reset for the next table
-                else:
-                    current_table_data.append(row)
-
-            # Process the last table if it exists
-            if current_table_data:
-                table_count += 1
-                table_df = pd.DataFrame(current_table_data)
-                table_df.columns = make_columns_unique(table_df.iloc[0])  # Use the first row as headers
-                table_df = table_df[1:]  # Remove the headers from the data
-                table_df.reset_index(drop=True, inplace=True)
-                tables[f"Table {table_count}"] = json.loads(table_df.to_json(orient="records"))
-
-            return tables
-
-        """ 
-        Args:
-            excel_file (str): Path to the Excel workbook.
-            output_file (str): Path to save the output JSON file.
-        """
-        excel_data = pd.ExcelFile(excel_file)
-        result = {}
-
-        # Process each sheet
-        for sheet_name in excel_data.sheet_names:
-            df = excel_data.parse(sheet_name, header=None)  # Load without headers
-
-            if sheet_name == "Summary":  # Special case for the "Summary" sheet
-                result[sheet_name] = summary_to_json(df)
-            else:  # Process other sheets
-                tables = []
-                headers = df.iloc[0]  # First row is the header
-                df = df[1:]  # Remove the header row from the data
-                headers = headers.fillna(f"Unnamed_{len(headers)}")  # Fill NaNs in headers
-                df.columns = make_columns_unique(headers)  # Ensure unique column names
-                tables.append(df)
-
-                # Process tables and add to JSON with table names
-                sheet_result = {}
-                for index, table in enumerate(tables):
-                    table.reset_index(drop=True, inplace=True)
-                    index_plus_one = f"Table {index + 1}"
-                    sheet_result[index_plus_one] = json.loads(table.to_json(orient='records'))
-
-                result[sheet_name] = sheet_result
-
-        # Convert the result dictionary to JSON
-        final_json = json.dumps(result, indent=4)
-
-        print(f"JSON output generated")
-
-        return final_json
-
-    # @timer_decorator
-    def start_extraction(self):
-        CA_ID = self.CA_ID
-
-        dfs = {}
-        name_dfs = {}
-        i = 0
-
-        for bank in self.bank_names:
-            bank = str(f"{bank}{i}")
-            pdf_path = self.pdf_paths[i]
-            pdf_password = self.pdf_passwords[i]
-            start_date = self.start_date[i]
-            end_date = self.end_date[i]
-
-            self.progress_function(
-                self.current_progress,
-                self.total_progress,
-                info=f"Extracting bank statement",
-            )
-            self.current_progress += 1
-            dfs[bank], name_dfs[bank] = self.commoner.extraction_process(
-                bank, pdf_path, pdf_password, start_date, end_date
-            )
-            self.progress_function(
-                self.current_progress,
-                self.total_progress,
-                info=f"Extraction completed successfully",
-            )
-            self.current_progress += 1
-            print(f"Extracted {bank} bank statement successfully")
-            self.account_number += f"{name_dfs[bank][1][:4]}x{name_dfs[bank][1][-4:]}_"
-            i += 1
-
-        print("|------------------------------|")
-        print(self.account_number)
-        print("|------------------------------|")
-
-        try:
-            saved_excel_dir = os.path.abspath(
-                os.path.join(BASE_DIR, "..", "..", "saved_excel")
-            )
-            if not os.path.isdir(saved_excel_dir):
-                os.makedirs(saved_excel_dir, exist_ok=True)
-
-            # Ensure filename is always defined
-            filename = os.path.join(
-                saved_excel_dir,
-                f"{self.CA_ID}_Single_Extracted_statements_file_{self.account_number}.xlsx",
-            )
-
-            # Create the Excel writer object
-            self.writer = pd.ExcelWriter(filename, engine="xlsxwriter")
-
-        except OSError as e:
-            logging.error(f"Failed to create directory {saved_excel_dir}: {e}")
-            raise OSError(f"Could not create output directory: {e}")
-
-        except Exception as e:
-            logging.error(f"Error processing bank statements: {e}")
-            raise
-
-        self.writer = pd.ExcelWriter(filename, engine="xlsxwriter")
-        self.progress_function(
-            self.current_progress, self.total_progress, info=f"Generating Excel"
-        )
-        self.current_progress += 1
-        loan_value_df = self.CA_Bank_statement(filename, dfs, name_dfs)
-        self.writer.close()
-
-        # adjust_excel_column_widths(filename)
-        self.progress_function(
-            self.current_progress, self.total_progress, info=f"Finalizing Excel"
-        )
-        self.current_progress += 1
-        self.commoner.color_summary_sheet(filename)
-        self.commoner.format_numbers_with_commas(filename)
-        sheet_specs = {
-            "Summary": {
-                "A": 50,
-                "B": 15,
-                "C": 15,
-                "D": 15,
-                "E": 15,
-                "F": 15,
-                "G": 15,
-                "H": 15,
-                "I": 15,
-                "J": 15,
-                "K": 15,
-                "L": 15,
-                "M": 15,
-                "N": 15,
-                "O": 15,
-            },
-            "DateWise Avg Balance": {
-                "A": 35,
-                "B": 15,
-                "C": 15,
-                "D": 15,
-                "E": 15,
-                "F": 15,
-                "G": 15,
-                "H": 15,
-                "I": 15,
-                "J": 15,
-                "K": 15,
-                "L": 15,
-                "M": 15,
-                "N": 20,
-                "O": 20,
-                "P": 20,
-            },
-            "BankWise Eligibility": {
-                "A": 35,
-                "B": 20,
-                "C": 20,
-                "D": 25,
-                "E": 25,
-                "F": 25,
-                "G": 25,
-                "H": 25,
-                "I": 25,
-            },
-            "Transaction": {
-                "A": 10,
-                "B": 70,
-                "C": 15,
-                "D": 15,
-                "E": 15,
-                "F": 20,
-                "G": 10,
-            },
-            "EOD Balance": {
-                "A": 15,
-                "B": 15,
-                "C": 15,
-                "D": 15,
-                "E": 15,
-                "F": 15,
-                "G": 15,
-                "H": 15,
-                "I": 15,
-                "J": 15,
-                "K": 15,
-                "L": 15,
-                "M": 15,
-                "N": 15,
-                "O": 15,
-                "P": 15,
-                "Q": 15,
-                "R": 15,
-                "S": 15,
-                "T": 15,
-                "U": 15,
-                "V": 15,
-                "W": 15,
-                "X": 15,
-                "Y": 15,
-                "Z": 15,
-            },
-            "Probable EMI": {
-                "A": 10,
-                "B": 70,
-                "C": 15,
-                "D": 15,
-                "E": 15,
-                "F": 20,
-                "G": 10,
-            },
-            "Bounce": {"A": 10, "B": 70, "C": 15, "D": 15, "E": 15, "F": 20, "G": 10},
-            "Creditor": {
-                "A": 10,
-                "B": 70,
-                "C": 15,
-                "D": 15,
-                "E": 15,
-                "F": 20,
-                "G": 10,
-            },
-            "Debtor": {
-                "A": 10,
-                "B": 70,
-                "C": 15,
-                "D": 15,
-                "E": 15,
-                "F": 20,
-                "G": 10,
-            },
-            "Cash Deposit": {
-                "A": 10,
-                "B": 70,
-                "C": 15,
-                "D": 15,
-                "E": 15,
-                "F": 20,
-                "G": 10,
-            },
-            "Cash Withdrawal": {
-                "A": 10,
-                "B": 70,
-                "C": 15,
-                "D": 15,
-                "E": 15,
-                "F": 20,
-                "G": 10,
-            },
-            "POS_CR": {"A": 10, "B": 70, "C": 15, "D": 15, "E": 15, "F": 20, "G": 10},
-            "UPI_CR": {"A": 10, "B": 70, "C": 15, "D": 15, "E": 15, "F": 20, "G": 10},
-            "Investment": {
-                "A": 10,
-                "B": 70,
-                "C": 15,
-                "D": 15,
-                "E": 15,
-                "F": 20,
-                "G": 10,
-            },
-            "Subscription_Entertainment": {
-                "A": 10,
-                "B": 70,
-                "C": 15,
-                "D": 15,
-                "E": 15,
-                "F": 20,
-                "G": 10,
-            },
-            "Refund-Reversal": {
-                "A": 10,
-                "B": 70,
-                "C": 15,
-                "D": 15,
-                "E": 15,
-                "F": 20,
-                "G": 10,
-            },
-            "Suspense Credit": {
-                "A": 10,
-                "B": 70,
-                "C": 15,
-                "D": 15,
-                "E": 15,
-                "F": 20,
-                "G": 10,
-            },
-            "Suspense Debit": {
-                "A": 10,
-                "B": 70,
-                "C": 15,
-                "D": 15,
-                "E": 15,
-                "F": 20,
-                "G": 10,
-            },
-            "Redemption, Dividend & Interest": {
-                "A": 10,
-                "B": 70,
-                "C": 15,
-                "D": 15,
-                "E": 15,
-                "F": 20,
-                "G": 10,
-            },
-            "Bank_charges": {
-                "A": 10,
-                "B": 70,
-                "C": 15,
-                "D": 15,
-                "E": 15,
-                "F": 20,
-                "G": 10,
-            },
-            "Payment Voucher": {
-                "A": 15,
-                "B": 15,
-                "C": 10,
-                "D": 20,
-                "E": 15,
-                "F": 15,
-                "G": 85,
-            },
-            "Receipt Voucher": {
-                "A": 15,
-                "B": 15,
-                "C": 20,
-                "D": 10,
-                "E": 15,
-                "F": 85,
-            },
-        }
-        self.commoner.adjust_column_widths_for_varied_sheets(filename, sheet_specs)
-
-        summary_note = (
-            "Disclaimer/Caveat: The entries throughout this file and tables are based on best guess basis and "
-            "information filtered under expenses and income. An attempt has been made to reflect the narration as "
-            "close as possible to the actuals. \r\nHowever, variations from above are possible based on customer profile "
-            "and their transactions with parties.Kindly cross check with your clients for any discrepancies"
-        )
-        self.commoner.Summary_note(filename, empty_rows_between=2)
-
-        Inve_note = "*This table reflects probable transactions in securities made during the year. \r\nKindly confirm the same from Annual Information Statement (AIS) reflected on the Income Tax Portal and the capital gain reports sent by the respective authorities."
-        self.commoner.Investment_note(filename, empty_rows_between=2)
-
-        ent_note = "*This table pertains to probable entertainment expenses made during the year."
-        # Entertainment_note(filename, ent_note, empty_rows_between=2)
-
-        CreditorList = "*The entries in this table likely pertain to payments from the parties during the period mentioned. \r\nIn case of payments through online portals, we have mentioned the portal names as reflected in the narration of the bank statement. \r\nWe would like to highlight that in case of contra entries, the name of the client will be reflected as a creditor."
-        self.commoner.CreditorList_note(filename, empty_rows_between=2)
-
-        Debtor_note = "*The entries in this table likely pertains to receipts from the respective parties. \r\nIn case of receipts through online portals, we have mentioned the portal names as reflected in the narration of the bank statement. \r\nWe would like to highlight that in case of contra entries, the name of the client will be reflected as a debtor."
-        self.commoner.DebtorList_note(filename, empty_rows_between=2)
-
-        CW_note = "*The above table reflects the cash withdrawals made during the year on the basis of widely used acronyms of the finance industry."
-        self.commoner.CashWithdrawalt_note(filename, CW_note, empty_rows_between=2)
-
-        CD_note = "*The above table reflects the cash deposits made during the year on the basis of widely used acronyms of the finance industry."
-        self.commoner.Cash_Deposit_note(filename, CD_note, empty_rows_between=2)
-
-        emi_note = "* Transactions in the above table are based on the widely used acronyms of the finance industry and likely reflect EMI payment. \r\nKindly confirm the same from the loan statement or the interest certificate."
-        self.commoner.Emi_note(filename, emi_note, empty_rows_between=2)
-
-        reef_note = "*This table likely pertains to refunds/reversals/cashbacks received from card payments/online transactions."
-        self.commoner.Refund_note(filename, reef_note, empty_rows_between=2)
-
-        sus_cr_note = "*This table pertains to transactions unidentified as per the current ledger bifurcation of the software. \r\nIn case of any technical errors, inconvience is highly regretted and feedback is appreciated."
-        self.commoner.Suspense_Credit_note(filename, empty_rows_between=2)
-
-        sus_dr_note = "*This table likely pertains to transactions unidentified as per the current ledger bifurcation of the software."
-        self.commoner.Suspense_Debit_note(filename, empty_rows_between=2)
-
-        self.commoner.add_filters_to_excel(filename)
-        self.commoner.create_excel_sheet(filename, loan_value_df)
-        self.commoner.color_excel_tabs_inplace(filename)
-
-        def reorder_sheets(filename):
-            wb = load_workbook(filename)
-            desired_order_front = ["Summary", "Opportunity to Earn"]
-            existing_sheets = [
-                sheet for sheet in desired_order_front if sheet in wb.sheetnames
-            ]
-            other_sheets = [
-                sheet for sheet in wb.sheetnames if sheet not in existing_sheets
-            ]
-            new_order = existing_sheets + other_sheets
-            wb._sheets = [wb[sheet] for sheet in new_order]
-            wb.save(filename)
-            return "Sheets reordered successfully"
-
-        reorder_sheets(filename)
-
-        output_json = self.process_excel_to_json(filename)
+        # output_json = process_excel_to_json(filename)
 
         folder_path = "saved_pdf"
         try:
@@ -738,41 +367,102 @@ class CABankStatement:
         except Exception as e:
             print(f"Failed to remove '{folder_path}': {e}")
 
-        return output_json
+        return {"sheets_in_json": json_lists_of_df, 'pdf_paths_not_extracted': pdf_paths_not_extracted}
 
 
-### --------------------------------------------------------------------------------------------------------- ###
-# #
-# bank_names = ["AXIS"]
-# pdf_paths = ["axisbank (1) (1).pdf"]
-# passwords = ["PRAN004086073"]
-# start_date = ["01-04-2020"]
-# end_date = ["10-11-2024"]
-# CA_ID = "PRANAV"
-# progress_data = {
-#     'progress_func': lambda current, total, info: print(f"{info} ({current}/{total})"),
-#     'current_progress': 10,
-#     'total_progress': 100
-# }
-#
-# converter = CABankStatement(bank_names, pdf_paths, passwords, start_date, end_date, CA_ID, progress_data)
-# converter.start_extraction()
+def start_extraction_add_pdf(bank_names, pdf_paths, passwords, start_dates, end_dates, CA_ID, progress_data, whole_transaction_sheet=None):
+    account_number = ""
+    dfs = {}
+    name_dfs = {}
+    pdf_paths_not_extracted = {
+        "paths": [],
+        "passwords": [],
+        "start_dates": [],
+        "end_dates": [],
+        "respective_list_of_columns": []
+    }
+    i = 0
+
+    for bank in bank_names:
+        bank = str(f"{bank}{i}")
+        pdf_path = pdf_paths[i]
+        pdf_password = passwords[i]
+        start_date = start_dates[i]
+        end_date = end_dates[i]
+
+        dfs[bank], name_dfs[bank] = extraction_process(bank, pdf_path, pdf_password, start_date, end_date)
+
+        print(f"Extracted {bank} bank statement successfully")
+        # account_number += f"{name_dfs[bank][1][:4]}x{name_dfs[bank][1][-4:]}_"
+        # Check if the extracted dataframe is empty
+        if dfs[bank].empty:
+            pdf_paths_not_extracted["paths"].append(pdf_path)
+            pdf_paths_not_extracted["passwords"].append(pdf_password)
+            pdf_paths_not_extracted["start_dates"].append(start_date)
+            pdf_paths_not_extracted["end_dates"].append(end_date)
+            pdf_paths_not_extracted["respective_list_of_columns"].append(name_dfs[bank])
+            del dfs[bank]
+            del name_dfs[bank]
+
+        i += 1
+
+    print("|------------------------------|")
+    print(account_number)
+    print("|------------------------------|")
+
+    if not dfs:
+        folder_path = "saved_pdf"
+        try:
+            shutil.rmtree(folder_path)
+            print(f"Removed all contents in '{folder_path}'")
+        except Exception as e:
+            print(f"Failed to remove '{folder_path}': {e}")
+
+        return {"sheets_in_json": None, 'pdf_paths_not_extracted': pdf_paths_not_extracted}
+
+    else:
+        data = []
+        # num_pairs = len(pd.Series(dfs).to_dict())
+
+        for key, value in name_dfs.items():
+            bank_name = key
+            acc_name = value[0]
+            acc_num = value[1]
+            if str(acc_num) == "None":
+                masked_acc_num = "None"
+            else:
+                masked_acc_num = "X" * (len(acc_num) - 4) + acc_num[-4:]
+            data.append([masked_acc_num, acc_name, bank_name])
+            for item in data:
+                item[2] = "".join(
+                    character for character in item[2] if character.isalpha()
+                )
+
+        name_n_num_df = process_name_n_num_df(data)
+        list_of_dataframes = list(dfs.values())
+
+        if whole_transaction_sheet is not None:
+            list_of_dataframes.append(transaction_sheet)
+
+        # arrange dfs
+        initial_df = pd.concat(sort_dataframes_by_date(list_of_dataframes)).fillna("").reset_index(drop=True)
+
+        df = category_add_ca(initial_df)
+        new_tran_df = another_method(df)
+
+        #############################------------------------#######################################
+
+        json_lists_of_df = returns_json_output_of_all_sheets(new_tran_df, name_n_num_df)
+
+        # excel_file_path = reconstruct_dict_from_json_save_to_excel(json_lists_of_df, account_number, CA_ID)
 
 
-# bank_names = ["HDFC"]
-# pdf_paths = ["/Users/sanchaythalnerkar/CypherSol/accountant/banks/hdfc.pdf"]
-# passwords = ["", ""]
-# start_date = ["26-01-2024"]
-# end_date = ["26-02-2024"]
-# CA_ID = "HDFC"
+        folder_path = "saved_pdf"
+        try:
+            shutil.rmtree(folder_path)
+            print(f"Removed all contents in '{folder_path}'")
+        except Exception as e:
+            print(f"Failed to remove '{folder_path}': {e}")
 
-# progress_data = {
-#     "progress_func": lambda current, total, info: print(f"{info} ({current}/{total})"),
-#     "current_progress": 10,
-#     "total_progress": 100,
-# }
+        return {"sheets_in_json": json_lists_of_df, 'pdf_paths_not_extracted': pdf_paths_not_extracted}
 
-# converter = CABankStatement(
-#     bank_names, pdf_paths, passwords, start_date, end_date, CA_ID, progress_data
-# )
-# converter.start_extraction()

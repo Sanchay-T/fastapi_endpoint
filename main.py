@@ -2,6 +2,7 @@ import os
 import uvicorn
 import logging
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
 
@@ -12,6 +13,14 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Bank Statement Analyzer API")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allow all methods
+    allow_headers=["*"],  # Allow all headers
+)
 
 
 class BankStatementRequest(BaseModel):
@@ -72,6 +81,7 @@ async def analyze_bank_statements(request: BankStatementRequest):
 
     except Exception as e:
         logger.error(f"Error processing bank statements: {str(e)}")
+        print
         raise HTTPException(
             status_code=500, detail=f"Error processing bank statements: {str(e)}"
         )

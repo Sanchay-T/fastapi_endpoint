@@ -1,0 +1,110 @@
+version: '3.8'
+
+services:
+  # Django web application
+  web:
+    build: .
+    restart: always
+    volumes:
+      - ./:/app/
+      - static_volume:/app/staticfiles
+      - media_volume:/app/media
+      - logs_volume:/app/logs
+    env_file:
+      - .env
+    depends_on:
+      - db
+      - redis
+    networks:
+      - app_network
+    ports:
+      - "8000:8000"
+
+  # PostgreSQL database
+  db:
+    image: postgres:14-alpine
+    restart: always
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+    env_file:
+      - .env
+    environment:
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_DB=${POSTGRES_DB:-postgres}
+    networks:
+      - app_network
+    ports:
+      - "5432:5432"
+
+  # Redis for caching and Celery
+  redis:
+    image: redis:7-alpine
+    restart: always
+    volumes:
+      - redis_data:/data
+    networks:
+      - app_network
+    ports:
+      - "6379:6379"
+
+  # Celery worker
+  celery:
+    build: .
+    restart: always
+    command: celery -A backend worker -l INFO
+    volumes:
+      - ./:/app/
+      - logs_volume:/app/logs
+    env_file:
+      - .env
+    depends_on:
+      - web
+      - redis
+      - db
+    networks:
+      - app_network
+
+  # Celery beat for scheduled tasks
+  celery-beat:
+    build: .
+    restart: always
+    command: celery -A backend beat -l INFO
+    volumes:
+      - ./:/app/
+      - logs_volume:/app/logs
+    env_file:
+      - .env
+    depends_on:
+      - web
+      - redis
+      - db
+      - celery
+    networks:
+      - app_network
+
+  # Nginx for serving static files and as a reverse proxy
+  nginx:
+    image: nginx:1.23-alpine
+    restart: always
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d
+      - static_volume:/app/staticfiles
+      - media_volume:/app/media
+    ports:
+      - "80:80"
+    depends_on:
+      - web
+    networks:
+      - app_network
+
+networks:
+  app_network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  static_volume:
+  media_volume:
+  logs_volume: 

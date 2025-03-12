@@ -43,9 +43,24 @@ pd.set_option("display.max_columns", None)
 pd.set_option("display.max_rows", None)
 pd.set_option("display.width", None)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-#from old_bank_extractions import CustomStatement
-import json
-from code_for_extraction import extract_with_test_cases, model_for_pdf, extract_dataframe_from_pdf
+# from old_bank_extractions import CustomStatement
+from code_for_extraction import ExtractionOnly
+
+
+class CommonFunctions:
+    def __init__(
+        self, bank_names, pdf_paths, pdf_passwords, start_date, end_date, CA_ID
+    ):
+        self.writer = None
+        self.bank_names = bank_names
+        self.pdf_paths = pdf_paths
+        self.pdf_passwords = pdf_passwords
+        self.start_date = start_date
+        self.end_date = end_date
+        self.account_number = ""
+        self.file_name = None
+        self.CA_ID = CA_ID
+        self.extractor = ExtractionOnly(bank_names, pdf_paths, pdf_passwords, CA_ID)
 
 ##EXTRACTION PROCESS
 def extract_text_from_file( file_path):
@@ -273,45 +288,61 @@ def extraction_process(bank, pdf_path, pdf_password, start_date, end_date):
     bank = re.sub(r"\d+", "", bank)
     ext = extract_extension(pdf_path)
 
-    if ext == ".pdf":
-        idf, text, explicit_lines = extract_with_test_cases(bank, pdf_path, pdf_password, CA_ID)
-        if idf.empty:
-            name_n_num = explicit_lines
+        if ext == ".pdf":
+            try:
+                idf, text = self.extractor.extract_with_test_cases(
+                    bank, pdf_path, pdf_password, CA_ID
+                )
+                name_n_num = self.extract_account_details(text)
+
+            except Exception as e:
+                raise ValueError("Error extracting data from the PDF.")
+
+        elif ext == ".csv":
+            df = pd.read_csv(pdf_path)
+            df.loc[0] = df.columns
+            df.columns = range(df.shape[1])
+            start_index = df.apply(
+                lambda row: (
+                    row.astype(str).str.contains("date", case=False).any()
+                    and row.astype(str)
+                    .str.contains("balance|total amount", case=False)
+                    .any()
+                )
+                or row.astype(str)
+                .str.contains("balance|total amount", case=False)
+                .any(),
+                axis=1,
+            ).idxmax()
+            df = df.loc[start_index:] if start_index is not None else pd.DataFrame()
+            idf, list = self.extractor.model_for_pdf(df)
+            name_n_num = self.extract_account_details(
+                self.extract_text_from_file(pdf_path)
+            )
+
         else:
-            name_n_num = extract_account_details(text)
+            df = pd.read_excel(pdf_path)
+            df.loc[0] = df.columns
+            df.columns = range(df.shape[1])
+            start_index = df.apply(
+                lambda row: (
+                    row.astype(str).str.contains("date", case=False).any()
+                    and row.astype(str)
+                    .str.contains("balance|total amount", case=False)
+                    .any()
+                )
+                or row.astype(str)
+                .str.contains("balance|total amount", case=False)
+                .any(),
+                axis=1,
+            ).idxmax()
+            df = df.loc[start_index:] if start_index is not None else pd.DataFrame()
+            idf, list = self.extractor.model_for_pdf(df)
+            name_n_num = self.extract_account_details(
+                self.extract_text_from_file(pdf_path)
+            )
 
-    elif ext == ".csv":
-        pdf_path = convert_csv_to_excel(pdf_path, CA_ID)
-        df = pd.read_excel(pdf_path)
-        df.loc[0] = df.columns
-        df.columns = range(df.shape[1])
-        start_index = df.apply(lambda row: (
-            row.astype(str).str.contains("date", case=False).any() and
-            row.astype(str).str.contains("balance|total amount", case=False).any()) or
-            row.astype(str).str.contains("balance|total amount", case=False).any(),
-            axis=1
-        ).idxmax()
-        df = df.loc[start_index:] if start_index is not None else pd.DataFrame()
-        idf, _ = model_for_pdf(df)
-        name_n_num = extract_account_details(extract_text_from_file(pdf_path))
-
-    else:
-        df = pd.read_excel(pdf_path)
-        df.loc[0] = df.columns
-        df.columns = range(df.shape[1])
-        start_index = df.apply(lambda row: (
-            row.astype(str).str.contains("date", case=False).any() and
-            row.astype(str).str.contains("balance|total amount", case=False).any()) or
-            row.astype(str).str.contains("balance|total amount", case=False).any(),
-            axis=1
-        ).idxmax()
-        df = df.loc[start_index:] if start_index is not None else pd.DataFrame()
-        idf, _ = model_for_pdf(df)
-        name_n_num = extract_account_details(extract_text_from_file(pdf_path))
-
-    # Add start and end date
-    if not idf.empty:
-        idf = add_start_n_end_date(idf, start_date, end_date, bank)
+        idf = self.add_start_n_end_date(idf, start_date, end_date, bank)
 
     return idf, name_n_num
 
@@ -580,27 +611,26 @@ def calculate_fixed_day_average( data):
     Average["Day"] = ["Daily_Avg"]
     Average = Average[["Day"] + [col for col in Average.columns if col != "Day"]]
 
-    # Define sets of days for which to calculate averages
-    sets_of_days = [
-        {"days": [5, 15, 25], "label": "Avg_Days_5_15_25"},
-        {"days": [5, 10, 15, 25], "label": "Avg_Days_5_10_15_25"},
-        {"days": [1, 5, 10, 15, 20, 25], "label": "Avg_Days_1_5_10_15_20_25"},
-        {"days": [8, 10, 15, 20, 25], "label": "Avg_Days_8_10_15_20_25"},
-        {"days": [1, 5, 10, 15, 20], "label": "Avg_Days_1_5_10_15_20"},
-        {"days": [5, 10, 15, 20, 25], "label": "Avg_Days_5_10_15_20_25"},
-        {"days": [1, 7, 14, 21, 28], "label": "Avg_Days_1_7_14_21_28"},
-        {"days": [1, 5, 10, 15, 25], "label": "Avg_Days_1_5_10_15_25"},
-        {"days": [5, 15, 25, 30], "label": "Avg_Days_5_15_25_30"},
-        {"days": [2, 4, 10, 17, 21], "label": "Avg_Days_2_4_10_17_25"},
-        {"days": [5, 15, 25, 30], "label": "Avg_Days_5_15_25_30"},
-        {"days": [1, 5, 15, 20,25], "label": "Avg_Days_1_5_15_20_25"},
-        {"days": [4,5,7,10,15,25], "label": "Avg_Days_4_5_7_10_15_25"},
-        {"days": [5,10,15,20,25,30], "label": "Avg_Days_5_10_15_20_25_30"},
-        {"days": [5, 10, 15, 20, 26], "label": "Avg_Days_5_10_15_20_26"},
-        {"days": [1,5,10,18,25], "label": "Avg_Days_1_5_18_25"},
-        {"days": [2,10,20,30], "label": "Avg_Days_2_10_20_30"},
-
-    ]
+        # Define sets of days for which to calculate averages
+        sets_of_days = [
+            {"days": [5, 15, 25], "label": "Avg_Days_5_15_25"},
+            {"days": [5, 10, 15, 25], "label": "Avg_Days_5_10_15_25"},
+            {"days": [1, 5, 10, 15, 20, 25], "label": "Avg_Days_1_5_10_15_20_25"},
+            {"days": [8, 10, 15, 20, 25], "label": "Avg_Days_8_10_15_20_25"},
+            {"days": [1, 5, 10, 15, 20], "label": "Avg_Days_1_5_10_15_20"},
+            {"days": [5, 10, 15, 20, 25], "label": "Avg_Days_5_10_15_20_25"},
+            {"days": [1, 7, 14, 21, 28], "label": "Avg_Days_1_7_14_21_28"},
+            {"days": [1, 5, 10, 15, 25], "label": "Avg_Days_1_5_10_15_25"},
+            {"days": [5, 15, 25, 30], "label": "Avg_Days_5_15_25_30"},
+            {"days": [2, 4, 10, 17, 21], "label": "Avg_Days_2_4_10_17_25"},
+            {"days": [5, 15, 25, 30], "label": "Avg_Days_5_15_25_30"},
+            {"days": [1, 5, 15, 20, 25], "label": "Avg_Days_1_5_15_20_25"},
+            {"days": [4, 5, 7, 10, 15, 25], "label": "Avg_Days_4_5_7_10_15_25"},
+            {"days": [5, 10, 15, 20, 25, 30], "label": "Avg_Days_5_10_15_20_25_30"},
+            {"days": [5, 10, 15, 20, 26], "label": "Avg_Days_5_10_15_20_26"},
+            {"days": [1, 5, 10, 18, 25], "label": "Avg_Days_1_5_18_25"},
+            {"days": [2, 10, 20, 30], "label": "Avg_Days_2_10_20_30"},
+        ]
 
     avg_balance_df_list = []
     for day_set in sets_of_days:
@@ -3288,17 +3318,18 @@ def category_add_ca(df):
         )
         df.update(imps_idfc)
 
-    def extract_bulkposting_category(description):
-        import re
-        try:
-            # Use regular expression to find the pattern between '_' and digits
-            match = re.search(r'_(\D+?)(?=\d)', description)
-            if match:
-                return match.group(1)
-            else:
+        def extract_bulkposting_category(description):
+            import re
+
+            try:
+                # Use regular expression to find the pattern between '_' and digits
+                match = re.search(r"_(\D+?)(?=\d)", description)
+                if match:
+                    return match.group(1)
+                else:
+                    return "Suspense"
+            except:
                 return "Suspense"
-        except:
-            return "Suspense"
 
     bulkposting_idfc = df[df["Description"].str.contains("bulkposting", na=False)]
     if not bulkposting_idfc.empty:
@@ -3307,15 +3338,14 @@ def category_add_ca(df):
         )
         df.update(bulkposting_idfc)
 
-
-    def extract_category_axis(x):
-        try:
-            category_part = x.split("/")[3]
-            if any(char.isdigit() for char in category_part):
+        def extract_category_axis(x):
+            try:
+                category_part = x.split("/")[3]
+                if any(char.isdigit() for char in category_part):
+                    return "Suspense"
+                return category_part
+            except IndexError:
                 return "Suspense"
-            return category_part
-        except IndexError:
-            return "Suspense"
 
     imps_axis = df[df["Description"].str.contains("imps/p2a", na=False)]
     imps_axis = imps_axis[
@@ -3416,22 +3446,26 @@ def category_add_ca(df):
         MOB["Category"] = MOB_names
         df.update(MOB)
 
-    MOB_1 = df[df["Description"].str.contains("mob/selfft/", na=False)]
-    MOB_1 = MOB_1[~MOB_1["Category"].str.contains("Salary Paid|Salary Received", na=False)]
-    if not MOB_1.empty:
-        MOB_names1 = MOB_1["Description"].apply(
-            lambda x: (
-                x.split("/")[-2] if not x.split("/")[2].isdigit() else "Suspense"
+        MOB_1 = df[df["Description"].str.contains("mob/selfft/", na=False)]
+        MOB_1 = MOB_1[
+            ~MOB_1["Category"].str.contains("Salary Paid|Salary Received", na=False)
+        ]
+        if not MOB_1.empty:
+            MOB_names1 = MOB_1["Description"].apply(
+                lambda x: (
+                    x.split("/")[-2] if not x.split("/")[2].isdigit() else "Suspense"
+                )
             )
-        )
-        MOB_1["Category"] = MOB_names1
-        df.update(MOB_1)
+            MOB_1["Category"] = MOB_names1
+            df.update(MOB_1)
 
-    BRN_clg = df[df["Description"].str.contains("brn-clg-chqpaidto", na=False)]
-    if not BRN_clg.empty:
-        BRN_clg_names = BRN_clg['Description'].apply(lambda x: x.split('to ')[-1].split('/')[0].strip())
-        BRN_clg['Category'] = BRN_clg_names
-        df.update(BRN_clg)
+        BRN_clg = df[df["Description"].str.contains("brn-clg-chqpaidto", na=False)]
+        if not BRN_clg.empty:
+            BRN_clg_names = BRN_clg["Description"].apply(
+                lambda x: x.split("to ")[-1].split("/")[0].strip()
+            )
+            BRN_clg["Category"] = BRN_clg_names
+            df.update(BRN_clg)
 
     BRN_clg = df[df["Description"].str.contains("brn-clg-chqpaidto", na=False)]
     BRN_clg = BRN_clg[
@@ -3775,116 +3809,135 @@ def category_add_ca(df):
 
     categories_to_include = ["UPI-Cr", "UPI-Dr"]
 
-    def apply_regex_to_empty_entities_axis(row):
-        if row['Category'] in categories_to_include:
-            if "upi/p2a" in row['Description'] or "upi/p2m" in row['Description']:
-                match = re.search(r'upi/p2[am]/\d+/([^/]+)/', row['Description'])
-                if match:
-                    return match.group(1)
-        return row['Category']
+        def apply_regex_to_empty_entities_axis(row):
+            if row["Category"] in categories_to_include:
+                if "upi/p2a" in row["Description"] or "upi/p2m" in row["Description"]:
+                    match = re.search(r"upi/p2[am]/\d+/([^/]+)/", row["Description"])
+                    if match:
+                        return match.group(1)
+            return row["Category"]
 
-    def apply_regex_to_categories_hdfc(row):
-        if row['Category'] in categories_to_include:
-            if "upi-" in row['Description']:
-                match = re.search(r'(?<=upi-)([a-zA-Z]+)', row['Description'])
-                if match:
-                    return match.group(1)
-        return row['Category']
+        def apply_regex_to_categories_hdfc(row):
+            if row["Category"] in categories_to_include:
+                if "upi-" in row["Description"]:
+                    match = re.search(r"(?<=upi-)([a-zA-Z]+)", row["Description"])
+                    if match:
+                        return match.group(1)
+            return row["Category"]
 
-    def apply_regex_to_empty_entities_sbi(row):
-        if row['Category'] in categories_to_include:
-            if "totransfer-upi" in row['Description'] or "bytransfer-upi" in row['Description']:
-                match = re.search(r'(totransfer|bytransfer)-upi/[cd]r/\d+/([a-zA-Z]+)/', row['Description'])
-                if match:
-                    return match.group(2)
-        return row['Category']
+        def apply_regex_to_empty_entities_sbi(row):
+            if row["Category"] in categories_to_include:
+                if (
+                    "totransfer-upi" in row["Description"]
+                    or "bytransfer-upi" in row["Description"]
+                ):
+                    match = re.search(
+                        r"(totransfer|bytransfer)-upi/[cd]r/\d+/([a-zA-Z]+)/",
+                        row["Description"],
+                    )
+                    if match:
+                        return match.group(2)
+            return row["Category"]
 
-    def apply_regex_to_empty_entities_kotak(row):
-        if row['Category'] in categories_to_include:
-            # Check if 'upi/' is in the description
-            if "upi/" in row['Description']:
-                # Match the name immediately after 'upi/'
-                match = re.search(r'upi/([a-zA-Z.]+)', row['Description'])
-                if match:
-                    # Clean the name by removing special characters and numbers
-                    name = re.sub(r'[^a-zA-Z]', '', match.group(1))  # Keep only alphabetic characters
-                    return name if name else "Suspense"  # Return 'Suspense' if the name is empty
-        return row['Category']
+        def apply_regex_to_empty_entities_kotak(row):
+            if row["Category"] in categories_to_include:
+                # Check if 'upi/' is in the description
+                if "upi/" in row["Description"]:
+                    # Match the name immediately after 'upi/'
+                    match = re.search(r"upi/([a-zA-Z.]+)", row["Description"])
+                    if match:
+                        # Clean the name by removing special characters and numbers
+                        name = re.sub(
+                            r"[^a-zA-Z]", "", match.group(1)
+                        )  # Keep only alphabetic characters
+                        return (
+                            name if name else "Suspense"
+                        )  # Return 'Suspense' if the name is empty
+            return row["Category"]
 
-    def apply_regex_to_empty_entities_rbl(row):
-        if row['Category'] in categories_to_include:
-            if "upi/" in row['Description']:
-                match = re.search(r'upi/\d+/\w+/([a-zA-Z0-9@.]+)', row['Description'])
-                if match:
-                    # Extract the raw name
-                    raw_name = match.group(1)
-                    # Remove numeric and '@' characters
-                    cleaned_name = re.sub(r'[0-9@]', '', raw_name)
-                    return cleaned_name
-        return row['Category']
+        def apply_regex_to_empty_entities_rbl(row):
+            if row["Category"] in categories_to_include:
+                if "upi/" in row["Description"]:
+                    match = re.search(
+                        r"upi/\d+/\w+/([a-zA-Z0-9@.]+)", row["Description"]
+                    )
+                    if match:
+                        # Extract the raw name
+                        raw_name = match.group(1)
+                        # Remove numeric and '@' characters
+                        cleaned_name = re.sub(r"[0-9@]", "", raw_name)
+                        return cleaned_name
+            return row["Category"]
 
-    def apply_regex_to_empty_entities_idfc(row):
-        if row['Category'] in categories_to_include:
-            if "upi/mob" in row['Description']:
-                match = re.search(r'upi/mob/\d+/([\w]+)', row['Description'])
-                if match:
-                    raw_name = match.group(1)
-                    cleaned_name = re.sub(r'[0-9@]', '', raw_name)
-                    print(f"Extracted Name: {cleaned_name}")
-                    return cleaned_name
-        return row['Category']
+        def apply_regex_to_empty_entities_idfc(row):
+            if row["Category"] in categories_to_include:
+                if "upi/mob" in row["Description"]:
+                    match = re.search(r"upi/mob/\d+/([\w]+)", row["Description"])
+                    if match:
+                        raw_name = match.group(1)
+                        cleaned_name = re.sub(r"[0-9@]", "", raw_name)
+                        print(f"Extracted Name: {cleaned_name}")
+                        return cleaned_name
+            return row["Category"]
 
-    def apply_regex_to_empty_entities_vasai(row):
-        if row['Category'] in categories_to_include:
-            match = re.search(r'upi/(cr|dr)/\d+/([\w]+)/', row['Description'])
-            if match:
-                extracted_name = match.group(2)
-                return extracted_name
-        return row['Category']
+        def apply_regex_to_empty_entities_vasai(row):
+            if row["Category"] in categories_to_include:
+                match = re.search(r"upi/(cr|dr)/\d+/([\w]+)/", row["Description"])
+                if match:
+                    extracted_name = match.group(2)
+                    return extracted_name
+            return row["Category"]
 
         # Step 1: Apply regex logic first
 
-    def extract_name_upiab(row):
-        if row['Category'] in categories_to_include:
-            match = re.search(r'upiab/\d+/cr/([\w]+)/', row['Description'])
-            if match:
-                extracted_name = match.group(1)  # Use group(1) for the first capturing group
-                return extracted_name.capitalize()  # Capitalize the name for consistency
-        return row['Category']
+        def extract_name_upiab(row):
+            if row["Category"] in categories_to_include:
+                match = re.search(r"upiab/\d+/cr/([\w]+)/", row["Description"])
+                if match:
+                    extracted_name = match.group(
+                        1
+                    )  # Use group(1) for the first capturing group
+                    return (
+                        extracted_name.capitalize()
+                    )  # Capitalize the name for consistency
+            return row["Category"]
 
-    def extract_name_mpay(row):
-        if row['Category'] in categories_to_include and row['Description'].startswith("mpay/upi/"):
-            match = re.search(r'mpay/upi/.+?/\w+/([\w]+)+@', row['Description'])
-            if match:
-                extracted_name = match.group(1)
-                cleaned_name = re.sub(r'[0-9@]', '', extracted_name)
-                return cleaned_name
-        return row['Category']
+        def extract_name_mpay(row):
+            if row["Category"] in categories_to_include and row[
+                "Description"
+            ].startswith("mpay/upi/"):
+                match = re.search(r"mpay/upi/.+?/\w+/([\w]+)+@", row["Description"])
+                if match:
+                    extracted_name = match.group(1)
+                    cleaned_name = re.sub(r"[0-9@]", "", extracted_name)
+                    return cleaned_name
+            return row["Category"]
 
-    df['Category'] = df.apply(apply_regex_to_empty_entities_axis, axis=1)
-    df['Category'] = df.apply(apply_regex_to_categories_hdfc, axis=1)
-    df['Category'] = df.apply(apply_regex_to_empty_entities_sbi, axis=1)
-    df['Category'] = df.apply(apply_regex_to_empty_entities_kotak, axis=1)
-    df['Category'] = df.apply(apply_regex_to_empty_entities_rbl, axis=1)
-    df['Category'] = df.apply(apply_regex_to_empty_entities_idfc, axis=1)
-    df['Category'] = df.apply(apply_regex_to_empty_entities_vasai, axis=1)
-    df['Category'] = df.apply(extract_name_upiab, axis=1)
-    df['Category'] = df.apply(extract_name_mpay, axis=1)
+        df["Category"] = df.apply(apply_regex_to_empty_entities_axis, axis=1)
+        df["Category"] = df.apply(apply_regex_to_categories_hdfc, axis=1)
+        df["Category"] = df.apply(apply_regex_to_empty_entities_sbi, axis=1)
+        df["Category"] = df.apply(apply_regex_to_empty_entities_kotak, axis=1)
+        df["Category"] = df.apply(apply_regex_to_empty_entities_rbl, axis=1)
+        df["Category"] = df.apply(apply_regex_to_empty_entities_idfc, axis=1)
+        df["Category"] = df.apply(apply_regex_to_empty_entities_vasai, axis=1)
+        df["Category"] = df.apply(extract_name_upiab, axis=1)
+        df["Category"] = df.apply(extract_name_mpay, axis=1)
 
-    df['Category'] = df.apply(apply_regex_to_categories_hdfc, axis=1)
-
+        df["Category"] = df.apply(apply_regex_to_categories_hdfc, axis=1)
 
     df["Balance"] = x  # Manish
     return df
 
-##SHEETS
-def process_name_n_num_df(data):
-    name_n_num_df = pd.DataFrame(data, columns=['Account Number', 'Account Name', 'Bank'])
-    name_n_num_df = name_n_num_df.iloc[[0]]
-    df_transposed = name_n_num_df.transpose()
-    df_transposed.reset_index(inplace=True)
-    df = pd.DataFrame(df_transposed)
-    return df
+    ##SHEETS
+    def process_name_n_num_df(self, data):
+        name_n_num_df = pd.DataFrame(
+            data, columns=["Account Number", "Account Name", "Bank"]
+        )
+        name_n_num_df = name_n_num_df.iloc[[0]]
+        df_transposed = name_n_num_df.transpose()
+        df_transposed.reset_index(inplace=True)
+        df = pd.DataFrame(df_transposed)
+        return df
 
 def summary_sheet( idf, open_bal, close_bal, new_tran_df):
 
@@ -5094,22 +5147,57 @@ def refund_reversal( df):
         )
     return refund
 
-def creditor_list( df):
-    df["Debit"] = pd.to_numeric(df["Debit"], errors="coerce")
-    df["Credit"] = pd.to_numeric(df["Credit"], errors="coerce")
-    debit = df[
-        (~df["Debit"].isnull()) & ((df["Credit"].isnull()) | (df["Credit"] == 0))
-    ]
-    patterns = [
-        "toib-","brn-clg-chq","mmt/imps","neftdr","neft/mb/","nft/","mob/tpft","nlcindialtd","neft/mb/ax","tortgs",
-        "rtgsdr","mob/tpft/","imb/","imps","imps/p2a","mob/selfft/","inb/","inb-","chqpaid","fundtrf","iconn",
-        "imps-cib","imps-inet","imps-rib","imps-mob","inft","mbk/xfer","neft","payc","r-utr","vmt-icon","chqpaid",
-        "byclg","rtgs","neftn","inb-","neft-barb","ecs/","bulkposting"
-    ]
-    regex_pattern = "|".join(patterns)
-    Creditor_list = debit[
-        debit["Description"].str.contains(regex_pattern, case=False)
-    ]
+    def creditor_list(self, df):
+        df["Debit"] = pd.to_numeric(df["Debit"], errors="coerce")
+        df["Credit"] = pd.to_numeric(df["Credit"], errors="coerce")
+        debit = df[
+            (~df["Debit"].isnull()) & ((df["Credit"].isnull()) | (df["Credit"] == 0))
+        ]
+        patterns = [
+            "toib-",
+            "brn-clg-chq",
+            "mmt/imps",
+            "neftdr",
+            "neft/mb/",
+            "nft/",
+            "mob/tpft",
+            "nlcindialtd",
+            "neft/mb/ax",
+            "tortgs",
+            "rtgsdr",
+            "mob/tpft/",
+            "imb/",
+            "imps",
+            "imps/p2a",
+            "mob/selfft/",
+            "inb/",
+            "inb-",
+            "chqpaid",
+            "fundtrf",
+            "iconn",
+            "imps-cib",
+            "imps-inet",
+            "imps-rib",
+            "imps-mob",
+            "inft",
+            "mbk/xfer",
+            "neft",
+            "payc",
+            "r-utr",
+            "vmt-icon",
+            "chqpaid",
+            "byclg",
+            "rtgs",
+            "neftn",
+            "inb-",
+            "neft-barb",
+            "ecs/",
+            "bulkposting",
+        ]
+        regex_pattern = "|".join(patterns)
+        Creditor_list = debit[
+            debit["Description"].str.contains(regex_pattern, case=False)
+        ]
 
     def extract_name(description):
         match = re.match(r"^[a-zA-Z\s]+$", description)
@@ -5123,72 +5211,121 @@ def creditor_list( df):
     )
     Creditor_list = pd.concat([Creditor_list, name_transactions])
 
-    # Additional code to exclude specified keywords
-    exclude_keywords = ["ach/","ach-","achdr","achd","bajajfinance","cms/","lamum","lcfm","lnpy",
-                        "loanreco","lptne","nach","magmafincorpltd","toachdraditybirl","toachdrambitfinv",
-                        "toachdrclixcapita","toachdrdeutscheb","toachdrdhaniloan","toachdrfedbankfi","toachdrfullerton",
-                        "toachdrindiabulls","toachdrindinfhouf","toachdrindusind","toachdrlendingkar","toachdrmagmafinco",
-                        "toachdrmahnimahin","toachdrmoneywisef","toachdrneogrowth","toachdrtatacapita","toachdrtpachmag",
-                        "toachdrtpachneo","toachdrtpcapfrst","toachdryesbankr","gsttaxpayment",
-    ]
-    exclude_pattern = "|".join(exclude_keywords)
-    Creditor_list = Creditor_list[
-        ~Creditor_list["Description"].str.contains(exclude_pattern, case=False)
-    ]
-    exclude_descriptions = ["billdesk", "gsttaxpayment", "atomstockbroker"]
-    for exclude in exclude_descriptions:
-        Creditor_list = Creditor_list[
-            ~Creditor_list["Description"].str.contains(exclude, case=False)
+        # Additional code to exclude specified keywords
+        exclude_keywords = [
+            "ach/",
+            "ach-",
+            "achdr",
+            "achd",
+            "bajajfinance",
+            "cms/",
+            "lamum",
+            "lcfm",
+            "lnpy",
+            "loanreco",
+            "lptne",
+            "nach",
+            "magmafincorpltd",
+            "toachdraditybirl",
+            "toachdrambitfinv",
+            "toachdrclixcapita",
+            "toachdrdeutscheb",
+            "toachdrdhaniloan",
+            "toachdrfedbankfi",
+            "toachdrfullerton",
+            "toachdrindiabulls",
+            "toachdrindinfhouf",
+            "toachdrindusind",
+            "toachdrlendingkar",
+            "toachdrmagmafinco",
+            "toachdrmahnimahin",
+            "toachdrmoneywisef",
+            "toachdrneogrowth",
+            "toachdrtatacapita",
+            "toachdrtpachmag",
+            "toachdrtpachneo",
+            "toachdrtpcapfrst",
+            "toachdryesbankr",
+            "gsttaxpayment",
         ]
-    exclude_categories = [
-        "Payment Received",
-        "Payment Made",
-        "Suspense",
-        "fastag",
-        "Refund/Reversal",
-        "Salary Paid",
-        "Loan given",
-        "Credit Card Payment",
-        "Food Expense/Hotel",
-        "Income Tax Paid",
-        "Rent Paid",
-        "Utility Bills",
-        "Reimbursement",
-        "Travelling Expense",
-        "Bank Charges",
-        "POS-Cr",
-        "POS-Dr",
-        "Payment Made",
-        "Payment Received",
-        "Cash Withdrawal",
-        "Bonus Paid",
-        "General insurance",
-        "Investment",
-        "Online Shopping",
-        "Probable EMI",
-        "TDS Deducted",
-        "GST Paid",
-    ]
-    for exclude in exclude_categories:
+        exclude_pattern = "|".join(exclude_keywords)
         Creditor_list = Creditor_list[
-            ~Creditor_list["Category"].str.contains(exclude, case=False)
+            ~Creditor_list["Description"].str.contains(exclude_pattern, case=False)
         ]
-    Creditor_list = Creditor_list.sort_values(by="Category")
-    return Creditor_list
+        exclude_descriptions = ["billdesk", "gsttaxpayment", "atomstockbroker"]
+        for exclude in exclude_descriptions:
+            Creditor_list = Creditor_list[
+                ~Creditor_list["Description"].str.contains(exclude, case=False)
+            ]
+        exclude_categories = [
+            "Payment Received",
+            "Payment Made",
+            "Suspense",
+            "fastag",
+            "Refund/Reversal",
+            "Salary Paid",
+            "Loan given",
+            "Credit Card Payment",
+            "Food Expense/Hotel",
+            "Income Tax Paid",
+            "Rent Paid",
+            "Utility Bills",
+            "Reimbursement",
+            "Travelling Expense",
+            "Bank Charges",
+            "POS-Cr",
+            "POS-Dr",
+            "Payment Made",
+            "Payment Received",
+            "Cash Withdrawal",
+            "Bonus Paid",
+            "General insurance",
+            "Investment",
+            "Online Shopping",
+            "Probable EMI",
+            "TDS Deducted",
+            "GST Paid",
+        ]
+        for exclude in exclude_categories:
+            Creditor_list = Creditor_list[
+                ~Creditor_list["Category"].str.contains(exclude, case=False)
+            ]
+        Creditor_list = Creditor_list.sort_values(by="Category")
+        return Creditor_list
 
-def debtor_list( df):
-    df["Debit"] = pd.to_numeric(df["Debit"], errors="coerce")
-    df["Credit"] = pd.to_numeric(df["Credit"], errors="coerce")
-    credit = df[
-        (~df["Credit"].isnull()) & ((df["Debit"].isnull()) | (df["Debit"] == 0))
-    ]
-    patterns = ["toib-","neft","mmt/imps","neftcr","imps","tortgs","rtgs","rtgscr","ecs/","mob/tpft/","imb/","mob/selfft/",
-                "inb/","imps-mob","nft/","byclg","inb-","neft-","googleindiadigital","gsttaxpayment","bulkposting"
-    ]
-    regex_pattern = "|".join(patterns)
-    Debtor_list = credit[
-        credit["Description"].str.contains(regex_pattern, case=False)
-    ]
+    def debtor_list(self, df):
+        df["Debit"] = pd.to_numeric(df["Debit"], errors="coerce")
+        df["Credit"] = pd.to_numeric(df["Credit"], errors="coerce")
+        credit = df[
+            (~df["Credit"].isnull()) & ((df["Debit"].isnull()) | (df["Debit"] == 0))
+        ]
+        patterns = [
+            "toib-",
+            "neft",
+            "mmt/imps",
+            "neftcr",
+            "imps",
+            "tortgs",
+            "rtgs",
+            "rtgscr",
+            "ecs/",
+            "mob/tpft/",
+            "imb/",
+            "mob/selfft/",
+            "inb/",
+            "imps-mob",
+            "nft/",
+            "byclg",
+            "inb-",
+            "neft-",
+            "googleindiadigital",
+            "gsttaxpayment",
+            "bulkposting",
+        ]
+        regex_pattern = "|".join(patterns)
+        Debtor_list = credit[
+            credit["Description"].str.contains(regex_pattern, case=False)
+        ]
 
     exclude_categories = [
         "Redemption, Dividend & Interest",
@@ -5227,10 +5364,10 @@ def debtor_list( df):
 # def is_name( description):
 #     return bool(re.match(r"^[a-zA-Z\s]+$", description))
 
-def is_name(description):
-    # Adjusted to strip whitespace and check for word characters
-    description = description.strip()
-    return bool(re.match(r"^[a-zA-Z\s]+$", description))
+    def is_name(self, description):
+        # Adjusted to strip whitespace and check for word characters
+        description = description.strip()
+        return bool(re.match(r"^[a-zA-Z\s]+$", description))
 
 # def categorize_name_transactions( df):
 #     # Apply 'NameTransaction' category for descriptions that appear to be names
@@ -5263,13 +5400,15 @@ def is_name(description):
 #
 #     return df
 
-def categorize_name_transactions(df):
-    # Clean the Description field
-    df["Description"] = df["Description"].str.replace(r"[^a-zA-Z\s]", "", regex=True).str.strip()
+    def categorize_name_transactions(self, df):
+        # Clean the Description field
+        df["Description"] = (
+            df["Description"].str.replace(r"[^a-zA-Z\s]", "", regex=True).str.strip()
+        )
 
-    # Ensure Debit and Credit are numeric
-    df["Debit"] = pd.to_numeric(df["Debit"], errors='coerce')
-    df["Credit"] = pd.to_numeric(df["Credit"], errors='coerce')
+        # Ensure Debit and Credit are numeric
+        df["Debit"] = pd.to_numeric(df["Debit"], errors="coerce")
+        df["Credit"] = pd.to_numeric(df["Credit"], errors="coerce")
 
     # Apply 'NameTransaction' category for descriptions that appear to be names
     df.loc[
@@ -5291,18 +5430,25 @@ def categorize_name_transactions(df):
 
     return df
 
-
-def another_method( df):
-    # Categorize transactions as Creditor and Debtor
-    Creditor_list = creditor_list(df)
-    Debtor_list = debtor_list(df)
-    NEW_DF = df.copy()
-    Creditor_list["Category"] = "Creditor"
-    Debtor_list["Category"] = "Debtor"
-    NEW_DF.update(Creditor_list)
-    NEW_DF.update(Debtor_list)
-    NEW_DF.loc[(NEW_DF["Description"].str.contains("UPI", case=False)) & (NEW_DF["Debit"] > 0),"Category"] = "UPI-Dr"
-    NEW_DF.loc[(NEW_DF["Description"].str.contains("UPI", case=False)) & (NEW_DF["Credit"] > 0),"Category",] = "UPI-Cr"
+    def another_method(self, df):
+        # Categorize transactions as Creditor and Debtor
+        Creditor_list = self.creditor_list(df)
+        Debtor_list = self.debtor_list(df)
+        NEW_DF = df.copy()
+        Creditor_list["Category"] = "Creditor"
+        Debtor_list["Category"] = "Debtor"
+        NEW_DF.update(Creditor_list)
+        NEW_DF.update(Debtor_list)
+        NEW_DF.loc[
+            (NEW_DF["Description"].str.contains("UPI", case=False))
+            & (NEW_DF["Debit"] > 0),
+            "Category",
+        ] = "UPI-Dr"
+        NEW_DF.loc[
+            (NEW_DF["Description"].str.contains("UPI", case=False))
+            & (NEW_DF["Credit"] > 0),
+            "Category",
+        ] = "UPI-Cr"
 
     return NEW_DF
 
@@ -5635,17 +5781,21 @@ def Bl_eligibility_bankwise( trans, data, eod):
     # print(payment_for_bl)
     # print("#" * 100)
 
-    # Convert "Value Date" to datetime and add "YearMonth" column for monthly grouping
-    trans['Value Date'] = pd.to_datetime(trans['Value Date'], format='%d-%m-%Y', errors='coerce')
-    trans['YearMonth'] = trans['Value Date'].dt.to_period('M')
+        # Convert "Value Date" to datetime and add "YearMonth" column for monthly grouping
+        trans["Value Date"] = pd.to_datetime(
+            trans["Value Date"], format="%d-%m-%Y", errors="coerce"
+        )
+        trans["YearMonth"] = trans["Value Date"].dt.to_period("M")
 
-    # Filter transactions for "Probable EMI" to calculate the monthly obligation amount
-    probable_emi = trans[trans['Category'] == 'Probable EMI']
-    obligation = 0
-    if not probable_emi.empty:
-        monthly_emi = probable_emi.groupby('YearMonth')['Debit'].sum().reset_index()
-        monthly_emi.columns = ['Month', 'Total EMI Amount']
-        obligation = monthly_emi.iloc[-1]['Total EMI Amount'] if not monthly_emi.empty else 0
+        # Filter transactions for "Probable EMI" to calculate the monthly obligation amount
+        probable_emi = trans[trans["Category"] == "Probable EMI"]
+        obligation = 0
+        if not probable_emi.empty:
+            monthly_emi = probable_emi.groupby("YearMonth")["Debit"].sum().reset_index()
+            monthly_emi.columns = ["Month", "Total EMI Amount"]
+            obligation = (
+                monthly_emi.iloc[-1]["Total EMI Amount"] if not monthly_emi.empty else 0
+            )
 
     # Initialize a list to store results for each bank
     bankwise_results = []
@@ -5654,74 +5804,146 @@ def Bl_eligibility_bankwise( trans, data, eod):
     processed_data = calculate_fixed_day_average(eod)
     print(processed_data)
 
-    # Helper Functions for ABB Extraction
-    def filter_12_months_average(data):
-        """Filter for the 12-month average data, if available."""
-        if 'Avg_Last_12_Months' not in data.columns:
-            print("Column 'Avg_Last_12_Months' is missing. Returning an empty DataFrame.")
-            return pd.DataFrame()  # Return an empty DataFrame
-        return data[['Day', 'Avg_Last_12_Months']]
+        # Helper Functions for ABB Extraction
+        def filter_12_months_average(data):
+            """Filter for the 12-month average data, if available."""
+            if "Avg_Last_12_Months" not in data.columns:
+                print(
+                    "Column 'Avg_Last_12_Months' is missing. Returning an empty DataFrame."
+                )
+                return pd.DataFrame()  # Return an empty DataFrame
+            return data[["Day", "Avg_Last_12_Months"]]
 
-    def extract_abb(data, day_key):
-        """Extract ABB based on a specific day key."""
-        if data.empty:
-            print("DataFrame is empty. Cannot extract ABB.")
-            return None
-        if day_key not in data['Day'].values:
-            print(f"'{day_key}' not found in the 'Day' column.")
-            return None
-        return data.loc[data['Day'] == day_key, 'Avg_Last_12_Months'].values[0]
+        def extract_abb(data, day_key):
+            """Extract ABB based on a specific day key."""
+            if data.empty:
+                print("DataFrame is empty. Cannot extract ABB.")
+                return None
+            if day_key not in data["Day"].values:
+                print(f"'{day_key}' not found in the 'Day' column.")
+                return None
+            return data.loc[data["Day"] == day_key, "Avg_Last_12_Months"].values[0]
 
-    # Filter and Extract Default ABB for general use
-    filtered_data = filter_12_months_average(processed_data)
-    default_ABB = extract_abb(filtered_data, 'Daily_Avg')  # Default ABB for most banks
+        # Filter and Extract Default ABB for general use
+        filtered_data = filter_12_months_average(processed_data)
+        default_ABB = extract_abb(
+            filtered_data, "Daily_Avg"
+        )  # Default ABB for most banks
 
-    # Define Bank Entries with specific AVERAGE BANKING and any custom ABB keys
-    bank_entries = [
-        {'Bank': 'CHOLA', 'DATE': '1 TO 30', 'AVERAGE BANKING': 200000},
-        {'Bank': 'L & T', 'DATE': '1 TO 30', 'AVERAGE BANKING': 150000},
-        {'Bank': 'CLIX', 'DATE': '1 TO 30', 'AVERAGE BANKING': default_ABB * 2 if default_ABB else 0},
-        {'Bank': 'HERO', 'DATE': '1,5,15,20,25', 'AVERAGE BANKING': 100000,'custom_day_key': 'Avg_Days_1_5_15_20_25'},
-        {'Bank': 'ABFL', 'DATE': '5,10,15,20,25', 'AVERAGE BANKING': 150000,'custom_day_key': 'Avg_Days_5_10_15_20_25'},
-        {'Bank':'INDUSIND','DATE':'4,5,7,10,15,25','AVERAGE BANKING': 100000,'custom_day_key': 'Avg_Days_4_5_7_10_15_25'},
-        {'Bank': 'SHRIRAM', 'DATE': '1 To 30', 'AVERAGE BANKING': 100000},
-        {'Bank': 'AXIS', 'DATE': '1 To 30', 'AVERAGE BANKING': 100000},
-        {'Bank': 'ICICI', 'DATE': '5,15,25', 'AVERAGE BANKING': 100000,'custom_day_key': 'Avg_Days_5_15_25'},
-        {'Bank': 'AXIS FINANCE', 'DATE': '1 To 30', 'AVERAGE BANKING': 200000},
-        {'Bank': 'AMBIT', 'DATE': '5,10,15,20,25,30', 'AVERAGE BANKING': 100000,'custom_day_key': 'Avg_Days_5_10_15_20_25_30'},
-        {'Bank': 'EDELWIESS', 'DATE': '5,10,15,20,26', 'AVERAGE BANKING': 100000,'custom_day_key': 'Avg_Days_5_10_15_20_26'},
-        {'Bank': 'UNITY', 'DATE': '1 TO 30', 'AVERAGE BANKING': 100000},
-        {'Bank': 'LOAN FRAME', 'DATE': '1 TO 30', 'AVERAGE BANKING': 100000},
-        {'Bank': 'NEOGROWTH', 'DATE': '1 TO 30', 'AVERAGE BANKING': 200000},
-        {'Bank': 'PROTIUM', 'DATE': '1 TO 30', 'AVERAGE BANKING': 200000},
-        {'Bank': 'TATA', 'DATE': '1 TO 30', 'AVERAGE BANKING': 300000},
-        {'Bank': 'KOTAK', 'DATE': '1 TO 30', 'AVERAGE BANKING': 100000},
-        {'Bank': 'POONAWALA', 'DATE': '1 TO 30', 'AVERAGE BANKING': 100000},
-        {'Bank': 'CREDIT SAISON', 'DATE': '1,5,10,18,25', 'AVERAGE BANKING': 100000,'custom_day_key': 'Avg_Days_1_5_18_25'},
-        {'Bank': 'YES BANK', 'DATE': '5,15,25', 'AVERAGE BANKING': 100000,'custom_day_key': 'Avg_Days_5_15_25'},
-        {'Bank': 'DB', 'DATE': '1,5,10,15,20,25', 'AVERAGE BANKING': 360000, 'custom_day_key': 'Avg_Days_1_5_10_15_20_25'},
-        {'Bank': 'SMC', 'DATE': '1 TO 30', 'AVERAGE BANKING': 300000},
-        {'Bank': 'MAS', 'DATE': '1 TO 30', 'AVERAGE BANKING': 150000},
-        {'Bank': 'BAJAJ', 'DATE': '2,10,20,30', 'AVERAGE BANKING': 100000,'custom_day_key': 'Avg_Days_1_5_10_15_20_25'},
-        {'Bank': 'IDFC', 'DATE': '1 TO 30', 'AVERAGE BANKING': 150000},
-        {'Bank': 'SMFG - fulltron', 'DATE': '1 TO 30', 'AVERAGE BANKING': 150000},
-        {'Bank': 'HDFC', 'DATE': '1,5,10,15,20,25', 'AVERAGE BANKING': 125000,'custom_day_key': 'Avg_Days_1_5_10_15_20_25'},
-        {'Bank': 'FED', 'DATE': '1,5,10,15,20,25', 'AVERAGE BANKING': 300000,'custom_day_key': 'Avg_Days_1_5_10_15_20_25'},
-        {'Bank': 'SCB', 'DATE': '1 TO 30', 'AVERAGE BANKING': 100000},
-        {'Bank': 'GODREJ', 'DATE': '5,10,15,20,25,30', 'AVERAGE BANKING': 300000,'custom_day_key': 'Avg_Days_5_10_15_20_25_30'},
-        {'Bank': 'UGRO', 'DATE': '1 TO 30', 'AVERAGE BANKING': 7000000},
+        # Define Bank Entries with specific AVERAGE BANKING and any custom ABB keys
+        bank_entries = [
+            {"Bank": "CHOLA", "DATE": "1 TO 30", "AVERAGE BANKING": 200000},
+            {"Bank": "L & T", "DATE": "1 TO 30", "AVERAGE BANKING": 150000},
+            {
+                "Bank": "CLIX",
+                "DATE": "1 TO 30",
+                "AVERAGE BANKING": default_ABB * 2 if default_ABB else 0,
+            },
+            {
+                "Bank": "HERO",
+                "DATE": "1,5,15,20,25",
+                "AVERAGE BANKING": 100000,
+                "custom_day_key": "Avg_Days_1_5_15_20_25",
+            },
+            {
+                "Bank": "ABFL",
+                "DATE": "5,10,15,20,25",
+                "AVERAGE BANKING": 150000,
+                "custom_day_key": "Avg_Days_5_10_15_20_25",
+            },
+            {
+                "Bank": "INDUSIND",
+                "DATE": "4,5,7,10,15,25",
+                "AVERAGE BANKING": 100000,
+                "custom_day_key": "Avg_Days_4_5_7_10_15_25",
+            },
+            {"Bank": "SHRIRAM", "DATE": "1 To 30", "AVERAGE BANKING": 100000},
+            {"Bank": "AXIS", "DATE": "1 To 30", "AVERAGE BANKING": 100000},
+            {
+                "Bank": "ICICI",
+                "DATE": "5,15,25",
+                "AVERAGE BANKING": 100000,
+                "custom_day_key": "Avg_Days_5_15_25",
+            },
+            {"Bank": "AXIS FINANCE", "DATE": "1 To 30", "AVERAGE BANKING": 200000},
+            {
+                "Bank": "AMBIT",
+                "DATE": "5,10,15,20,25,30",
+                "AVERAGE BANKING": 100000,
+                "custom_day_key": "Avg_Days_5_10_15_20_25_30",
+            },
+            {
+                "Bank": "EDELWIESS",
+                "DATE": "5,10,15,20,26",
+                "AVERAGE BANKING": 100000,
+                "custom_day_key": "Avg_Days_5_10_15_20_26",
+            },
+            {"Bank": "UNITY", "DATE": "1 TO 30", "AVERAGE BANKING": 100000},
+            {"Bank": "LOAN FRAME", "DATE": "1 TO 30", "AVERAGE BANKING": 100000},
+            {"Bank": "NEOGROWTH", "DATE": "1 TO 30", "AVERAGE BANKING": 200000},
+            {"Bank": "PROTIUM", "DATE": "1 TO 30", "AVERAGE BANKING": 200000},
+            {"Bank": "TATA", "DATE": "1 TO 30", "AVERAGE BANKING": 300000},
+            {"Bank": "KOTAK", "DATE": "1 TO 30", "AVERAGE BANKING": 100000},
+            {"Bank": "POONAWALA", "DATE": "1 TO 30", "AVERAGE BANKING": 100000},
+            {
+                "Bank": "CREDIT SAISON",
+                "DATE": "1,5,10,18,25",
+                "AVERAGE BANKING": 100000,
+                "custom_day_key": "Avg_Days_1_5_18_25",
+            },
+            {
+                "Bank": "YES BANK",
+                "DATE": "5,15,25",
+                "AVERAGE BANKING": 100000,
+                "custom_day_key": "Avg_Days_5_15_25",
+            },
+            {
+                "Bank": "DB",
+                "DATE": "1,5,10,15,20,25",
+                "AVERAGE BANKING": 360000,
+                "custom_day_key": "Avg_Days_1_5_10_15_20_25",
+            },
+            {"Bank": "SMC", "DATE": "1 TO 30", "AVERAGE BANKING": 300000},
+            {"Bank": "MAS", "DATE": "1 TO 30", "AVERAGE BANKING": 150000},
+            {
+                "Bank": "BAJAJ",
+                "DATE": "2,10,20,30",
+                "AVERAGE BANKING": 100000,
+                "custom_day_key": "Avg_Days_1_5_10_15_20_25",
+            },
+            {"Bank": "IDFC", "DATE": "1 TO 30", "AVERAGE BANKING": 150000},
+            {"Bank": "SMFG - fulltron", "DATE": "1 TO 30", "AVERAGE BANKING": 150000},
+            {
+                "Bank": "HDFC",
+                "DATE": "1,5,10,15,20,25",
+                "AVERAGE BANKING": 125000,
+                "custom_day_key": "Avg_Days_1_5_10_15_20_25",
+            },
+            {
+                "Bank": "FED",
+                "DATE": "1,5,10,15,20,25",
+                "AVERAGE BANKING": 300000,
+                "custom_day_key": "Avg_Days_1_5_10_15_20_25",
+            },
+            {"Bank": "SCB", "DATE": "1 TO 30", "AVERAGE BANKING": 100000},
+            {
+                "Bank": "GODREJ",
+                "DATE": "5,10,15,20,25,30",
+                "AVERAGE BANKING": 300000,
+                "custom_day_key": "Avg_Days_5_10_15_20_25_30",
+            },
+            {"Bank": "UGRO", "DATE": "1 TO 30", "AVERAGE BANKING": 7000000},
+        ]
 
-    ]
+        # Process each bank entry for eligibility
+        for entry in bank_entries:
+            bank_name = entry["Bank"]
+            date_range = entry["DATE"]
+            average_banking = entry["AVERAGE BANKING"]
 
-    # Process each bank entry for eligibility
-    for entry in bank_entries:
-        bank_name = entry['Bank']
-        date_range = entry['DATE']
-        average_banking = entry['AVERAGE BANKING']
-
-        # Use a custom ABB if defined for this bank; otherwise, use the default ABB
-        day_key = entry.get('custom_day_key', 'Daily_Avg')
-        ABB = extract_abb(filtered_data, day_key)
+            # Use a custom ABB if defined for this bank; otherwise, use the default ABB
+            day_key = entry.get("custom_day_key", "Daily_Avg")
+            ABB = extract_abb(filtered_data, day_key)
 
         # Calculate metrics if ABB is available
         if ABB is not None:
@@ -5731,21 +5953,25 @@ def Bl_eligibility_bankwise( trans, data, eod):
         else:
             NetABB = Emi_proposed = Eligible_Loan_Amount = 0
 
-        # Determine Eligibility Status based on Net ABB and AVERAGE BANKING
-        eligibility_status = "Eligible" if NetABB >= average_banking else "Not Eligible"
+            # Determine Eligibility Status based on Net ABB and AVERAGE BANKING
+            eligibility_status = (
+                "Eligible" if NetABB >= average_banking else "Not Eligible"
+            )
 
-        # Append the results for each bank
-        bankwise_results.append({
-            'Bank': bank_name,
-            'DATE': date_range,
-            'ABB': ABB,
-            'Obligation': obligation,
-            'Net ABB': NetABB,
-            'AVERAGE BANKING': average_banking,
-            'Emi of the proposed loan': Emi_proposed,
-            'Eligible Loan Amount': Eligible_Loan_Amount,
-            'Eligibility Status': eligibility_status
-        })
+            # Append the results for each bank
+            bankwise_results.append(
+                {
+                    "Bank": bank_name,
+                    "DATE": date_range,
+                    "ABB": ABB,
+                    "Obligation": obligation,
+                    "Net ABB": NetABB,
+                    "AVERAGE BANKING": average_banking,
+                    "Emi of the proposed loan": Emi_proposed,
+                    "Eligible Loan Amount": Eligible_Loan_Amount,
+                    "Eligibility Status": eligibility_status,
+                }
+            )
 
     # Convert the list of results to a DataFrame for easier handling
     bankwise_df = pd.DataFrame(bankwise_results)

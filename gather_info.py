@@ -21,12 +21,14 @@ def gather_python_files(root="."):
                 py_files.append(full_path)
     return py_files
 
+
 def count_lines_of_code(filepath):
     """
     Return total number of lines in the given file.
     """
     with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
         return sum(1 for _ in f)
+
 
 def find_classes(filepath):
     """
@@ -42,6 +44,7 @@ def find_classes(filepath):
     except Exception as e:
         pass
     return classes
+
 
 def main():
     print("Collecting Python file info...\n")
@@ -64,6 +67,7 @@ def main():
         if classes:
             print(f"  {pf}: {classes}")
     print("\nDone. You can copy/paste this info back to me!")
+
 
 if __name__ == "__main__":
     main()

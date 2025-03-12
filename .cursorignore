@@ -1,0 +1,4 @@
+# # Ignore everything in the current directory
+
+# # If you want to un-ignore specific files or directories later, you can add them with !
+# # Example: !important_file.txt

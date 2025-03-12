@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Account Locked</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        line-height: 1.6;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+        color: #333;
+      }
+      .container {
+        border: 1px solid #ddd;
+        border-radius: 5px;
+        padding: 30px;
+        background-color: #f9f9f9;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+      }
+      h1 {
+        color: #d9534f;
+        margin-top: 0;
+      }
+      .countdown {
+        font-size: 1.2em;
+        font-weight: bold;
+        margin: 20px 0;
+      }
+      .info {
+        background-color: #d1ecf1;
+        border: 1px solid #bee5eb;
+        color: #0c5460;
+        padding: 10px;
+        border-radius: 4px;
+        margin-top: 20px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>Account Temporarily Locked</h1>
+      <p>
+        For security reasons, your account has been temporarily locked due to
+        multiple failed login attempts.
+      </p>
+
+      <div class="countdown">
+        <p>Please try again after: <span id="countdown">5 minutes</span></p>
+      </div>
+
+      <p>If you're having trouble logging in:</p>
+      <ul>
+        <li>Make sure your caps lock is off</li>
+        <li>Check that you're using the correct username/email and password</li>
+        <li>
+          If you've forgotten your password, use the password reset option
+        </li>
+      </ul>
+
+      <div class="info">
+        <p>
+          If you believe this is an error or need immediate assistance, please
+          contact support.
+        </p>
+      </div>
+    </div>
+  </body>
+</html>

@@ -85,7 +85,6 @@ def health_check(request):
     return Response(health_data, status=response_status)
 
 
-
 class UserViewSet(viewsets.ReadOnlyModelViewSet):
     """
     API endpoint for listing and retrieving users.

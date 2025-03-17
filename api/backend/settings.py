@@ -12,11 +12,9 @@ from django.core.management.utils import get_random_secret_key
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
-
 # Load environment variables from .env file
 from dotenv import load_dotenv
-
-load_dotenv(os.path.join(os.path.dirname(BASE_DIR), ".env"))
+load_dotenv(os.path.join(BASE_DIR, ".env"))
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.environ.get("SECRET_KEY", get_random_secret_key())
@@ -25,7 +23,7 @@ SECRET_KEY = os.environ.get("SECRET_KEY", get_random_secret_key())
 DEBUG = os.environ.get("DEBUG", "False").lower() == "true"
 
 ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
-
+print("DEBUG : ", DEBUG)
 # Application definition
 INSTALLED_APPS = [
     # Django Core
@@ -72,7 +70,7 @@ MIDDLEWARE = [
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     # Protection middlewares (after authentication)
-    "defender.middleware.FailedLoginMiddleware",  # Brute-force protection
+    # "defender.middleware.FailedLoginMiddleware",  # Brute-force protection
     # Django Core middlewares continued
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
@@ -129,8 +127,8 @@ CACHES = {
 }
 
 # Session settings
-SESSION_ENGINE = "django.contrib.sessions.backends.cache"
-SESSION_CACHE_ALIAS = "default"
+# SESSION_ENGINE = "django.contrib.sessions.backends.cache"
+# SESSION_CACHE_ALIAS = "default"
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
@@ -233,10 +231,11 @@ if not DEBUG:
 
 # Content Security Policy
 CSP_DEFAULT_SRC = ("'self'",)
-CSP_STYLE_SRC = ("'self'", "'unsafe-inline'")
-CSP_SCRIPT_SRC = ("'self'",)
+CSP_STYLE_SRC = ("'self'", "'unsafe-inline'", "http://netdna.bootstrapcdn.com")
+CSP_SCRIPT_SRC = ("'self'","blob:")
 CSP_IMG_SRC = ("'self'", "data:")
 CSP_FONT_SRC = ("'self'", "data:")
+# CSP_WORKER_SRC = ("'self'", 'blob:')
 
 # Django Defender settings
 DEFENDER_REDIS_URL = os.environ.get("REDIS_URL", "redis://127.0.0.1:6379/1")

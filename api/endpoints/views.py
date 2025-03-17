@@ -85,6 +85,7 @@ def health_check(request):
     return Response(health_data, status=response_status)
 
 
+
 class UserViewSet(viewsets.ReadOnlyModelViewSet):
     """
     API endpoint for listing and retrieving users.
@@ -93,7 +94,7 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet):
 
     queryset = User.objects.all().order_by("-date_joined")
     serializer_class = UserSerializer
-    permission_classes = [IsAdminUser]
+    permission_classes = []
     filter_backends = [
         DjangoFilterBackend,
         filters.SearchFilter,

@@ -34,6 +34,7 @@ schema_view = get_schema_view(
 
 urlpatterns = [
     # Admin site
+    path('admin/defender/', include('defender.urls')), # defender admin
     path("admin/", admin.site.urls),
     # API Endpoints
     path("api/v1/", include("endpoints.urls")),

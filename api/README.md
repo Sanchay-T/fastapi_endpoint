@@ -217,7 +217,7 @@ API documentation is available at:
 2. Create a virtual environment
 3. Copy `.env.example` to `.env` and update variables
 4. Run database migrations: `python manage.py migrate`
-5. Start the development server: `python manage.py runserver`
+5. Start the development server: `python manage.py runserver_plus --cert-file local-cert.pem --key-file local-key.pem`
 
 For containerized development:
 ```bash

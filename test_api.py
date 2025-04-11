@@ -12,8 +12,9 @@ from urllib3.exceptions import InsecureRequestWarning
 requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
 
 # Base URL for the API
-BASE_URL = "https://localhost:8000/api/v1"
-DOCS_URL = "https://localhost:8000/api/docs/"
+BASE_URL = "https://127.0.0.1:8000/api/v1"
+DOCS_URL = "https://127.0.0.1:8000/api/docs/"
+
 
 # Test the health check endpoint (doesn't require authentication)
 def test_health_check():
@@ -27,17 +28,18 @@ def test_health_check():
         print(f"Error: {e}")
         return False
 
+
 # Test authentication with JWT
 def test_authentication(username, password):
     print("\n=== Testing Authentication ===")
     try:
         response = requests.post(
-            f"{BASE_URL}/auth/token/", 
+            f"{BASE_URL}/auth/token/",
             data={"username": username, "password": password},
-            verify=False
+            verify=False,
         )
         print(f"Status Code: {response.status_code}")
-        
+
         if response.status_code == 200:
             token_data = response.json()
             print("Authentication successful!")
@@ -51,16 +53,17 @@ def test_authentication(username, password):
         print(f"Error: {e}")
         return None
 
+
 # Test API key management
 def test_api_keys(access_token):
     print("\n=== Testing API Keys Endpoint ===")
     headers = {"Authorization": f"Bearer {access_token}"}
-    
+
     try:
         # Get list of API keys
         response = requests.get(f"{BASE_URL}/api-keys/", headers=headers, verify=False)
         print(f"Status Code: {response.status_code}")
-        
+
         if response.status_code == 200:
             api_keys = response.json()
             print(f"API Keys: {json.dumps(api_keys, indent=2)}")
@@ -72,16 +75,17 @@ def test_api_keys(access_token):
         print(f"Error: {e}")
         return False
 
+
 # Test scheduled tasks
 def test_scheduled_tasks(access_token):
     print("\n=== Testing Scheduled Tasks Endpoint ===")
     headers = {"Authorization": f"Bearer {access_token}"}
-    
+
     try:
         # Get list of tasks
         response = requests.get(f"{BASE_URL}/tasks/", headers=headers, verify=False)
         print(f"Status Code: {response.status_code}")
-        
+
         if response.status_code == 200:
             tasks = response.json()
             print(f"Tasks: {json.dumps(tasks, indent=2)}")
@@ -92,6 +96,7 @@ def test_scheduled_tasks(access_token):
     except Exception as e:
         print(f"Error: {e}")
         return False
+
 
 # Test API documentation
 def test_api_docs():
@@ -105,15 +110,16 @@ def test_api_docs():
         print(f"Error: {e}")
         return False
 
+
 def main():
     print("=== Django REST Framework API Testing ===")
-    
+
     # Test health check (no auth required)
     health_ok = test_health_check()
-    
+
     # Test API docs
     docs_ok = test_api_docs()
-    
+
     # Ask for credentials
     if len(sys.argv) >= 3:
         username = sys.argv[1]
@@ -121,19 +127,19 @@ def main():
     else:
         username = input("Enter username: ")
         password = input("Enter password: ")
-    
+
     # Test authentication
     token_data = test_authentication(username, password)
-    
+
     if token_data:
-        access_token = token_data.get('access')
-        
+        access_token = token_data.get("access")
+
         # Test API keys endpoint
         api_keys_ok = test_api_keys(access_token)
-        
+
         # Test scheduled tasks endpoint
         tasks_ok = test_scheduled_tasks(access_token)
-        
+
         print("\n=== Test Summary ===")
         print(f"Health Check: {'✅' if health_ok else '❌'}")
         print(f"API Documentation: {'✅' if docs_ok else '❌'}")
@@ -147,6 +153,7 @@ def main():
         print(f"Authentication: ❌")
         print("API Keys: Not tested (authentication required)")
         print("Scheduled Tasks: Not tested (authentication required)")
+
 
 if __name__ == "__main__":
     main()

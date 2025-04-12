@@ -1,3 +1,8 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
 ## 1. Project Overview
 
 **Goal:** We are building a RESTful API designed to analyse bank statements.

@@ -1,24 +1,32 @@
 import os
 import uvicorn
 import logging
-from fastapi import FastAPI, HTTPException,Request
+from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
 from typing import List, Optional
 from fastapi.responses import HTMLResponse
 from fastapi import Body
 import pandas as pd
+
 # import matplotlib
 # matplotlib.use('Agg')
 # from findaddy.exceptions import ExtractionError
-from backend.utils import get_saved_pdf_dir
+from statement_analyzer.utils import get_saved_pdf_dir
+
 TEMP_SAVED_PDF_DIR = get_saved_pdf_dir()
 from pydantic import Field
+
 # If you have other custom imports:
-from backend.tax_professional.banks.CA_Statement_Analyzer import start_extraction_add_pdf, refresh_category_all_sheets, save_to_excel,individual_summary
+from statement_analyzer.tax_professional.banks.CA_Statement_Analyzer import (
+    start_extraction_add_pdf,
+    refresh_category_all_sheets,
+    save_to_excel,
+    individual_summary,
+)
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from backend.account_number_ifsc_extraction import extract_accno_ifsc
-from backend.pdf_to_name import extract_entities
+from statement_analyzer.account_number_ifsc_extraction import extract_accno_ifsc
+from statement_analyzer.pdf_to_name import extract_entities
 import time
 
 logging.basicConfig(level=logging.INFO)
@@ -28,28 +36,28 @@ app = FastAPI(title="Bank Statement Analyzer API")
 logger.info(f"Temp directory python : {TEMP_SAVED_PDF_DIR}")
 
 
-
 class Transaction(BaseModel):
     id: int
-    statementId:  Optional[str] = None
-    date:  Optional[str] = None
-    description:  Optional[str] = None
+    statementId: Optional[str] = None
+    date: Optional[str] = None
+    description: Optional[str] = None
     amount: Optional[float] = None
     category: Optional[str] = None
-    transaction_type: Optional[str] = None     
+    transaction_type: Optional[str] = None
     balance: Optional[float] = None
     bank: Optional[str] = None
     entity: Optional[str] = None
+
 
 class Bounds(BaseModel):
     start: float
     end: float
 
+
 class ColumnData(BaseModel):
     index: int
     bounds: Bounds
-    column_type:  Optional[str] = Field(None, alias="type")
-    
+    column_type: Optional[str] = Field(None, alias="type")
 
 
 class EditPdfRequest(BaseModel):
@@ -62,6 +70,7 @@ class EditPdfRequest(BaseModel):
     whole_transaction_sheet: Optional[List[Transaction]] = None
     ca_id: str
 
+
 class BankStatementRequest(BaseModel):
     bank_names: List[str]
     pdf_paths: List[str]
@@ -70,32 +79,39 @@ class BankStatementRequest(BaseModel):
     end_date: List[str]
     ca_id: str
     whole_transaction_sheet: Optional[List[dict]] = None
-    aiyazs_array_of_array: Optional[List[List[ColumnData]]]=None
-    
+    aiyazs_array_of_array: Optional[List[List[ColumnData]]] = None
+
+
 class EditCategoryRequest(BaseModel):
     transaction_data: List[dict]
     new_categories: List[dict]
     eod_data: List[dict]
+
 
 class ExcelDownloadRequest(BaseModel):
     transaction_data: List[dict]
     name_n_num: List[dict]
     case_name: str
 
+
 class DummyRequest(BaseModel):
     data: str
 
+
 class InvididualSummaryRequest(BaseModel):
-    transactions_data:  List[dict]
+    transactions_data: List[dict]
+
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
     return "<h1>Yes, I am alive!</h1>"
 
+
 @app.post("/")
 async def root(data: str = Body(...)):
     print("Received data in root : ", data)
     return {"message": "Bank Statement Analyzer API"}
+
 
 @app.post("/analyze-statements/")
 async def analyze_bank_statements(request: BankStatementRequest):
@@ -128,24 +144,21 @@ async def analyze_bank_statements(request: BankStatementRequest):
         logger.info("Initializing CABankStatement")
         # Pass empty list if no passwords
 
-        bank_names = request.bank_names 
+        bank_names = request.bank_names
         pdf_paths = request.pdf_paths
-        passwords =  request.passwords if request.passwords else []
+        passwords = request.passwords if request.passwords else []
         start_date = request.start_date if request.start_date else []
         end_date = request.end_date if request.end_date else []
         CA_ID = request.ca_id
         progress_data = progress_data
 
-        ner_results = {
-                "Name": [],
-                "Acc Number": []
-            }
+        ner_results = {"Name": [], "Acc Number": []}
 
         # Process PDFs with NER
         start_ner = time.time()
         person_count = 0
         for pdf in pdf_paths:
-            person_count+=1
+            person_count += 1
             # result = pdf_to_name_and_accno(pdf)
             fetched_name = None
             fetched_acc_num = None
@@ -153,34 +166,32 @@ async def analyze_bank_statements(request: BankStatementRequest):
             name_entities = extract_entities(pdf)
             acc_number_ifsc = extract_accno_ifsc(pdf)
 
-            print("name_entities:- ",name_entities)
+            print("name_entities:- ", name_entities)
 
-            fetched_acc_num=acc_number_ifsc["acc"]
+            fetched_acc_num = acc_number_ifsc["acc"]
 
             if name_entities:
                 for entity in name_entities:
-                    if fetched_name==None:
-                        fetched_name=entity
+                    if fetched_name == None:
+                        fetched_name = entity
 
             if fetched_name:
                 ner_results["Name"].append(fetched_name)
             else:
                 ner_results["Name"].append(f"Statement {person_count}")
-                
+
             if fetched_acc_num:
                 ner_results["Acc Number"].append(fetched_acc_num)
             else:
                 ner_results["Acc Number"].append("XXXXXXXXXXX")
         print("Ner results", ner_results)
         end_ner = time.time()
-        print("Time taken to process NER", end_ner-start_ner)
-        
-
+        print("Time taken to process NER", end_ner - start_ner)
 
         logger.info("Starting extraction")
         whole_transaction_sheet = request.whole_transaction_sheet or None
         temp_aiyaz_array_of_array = []
-        if(request.aiyazs_array_of_array):
+        if request.aiyazs_array_of_array:
             for statement in request.aiyazs_array_of_array:
                 temp_aiyaz_array = []
                 for col in statement:
@@ -190,11 +201,22 @@ async def analyze_bank_statements(request: BankStatementRequest):
         if whole_transaction_sheet is not None:
             whole_transaction_sheet = pd.DataFrame(whole_transaction_sheet)
             print("whole_transaction_sheet", whole_transaction_sheet.head())
-            whole_transaction_sheet["Value Date"] = pd.to_datetime(whole_transaction_sheet["Value Date"], format="%d-%m-%Y")
+            whole_transaction_sheet["Value Date"] = pd.to_datetime(
+                whole_transaction_sheet["Value Date"], format="%d-%m-%Y"
+            )
 
-                
-        result = start_extraction_add_pdf(bank_names, pdf_paths, passwords, start_date, end_date, CA_ID, progress_data,whole_transaction_sheet=whole_transaction_sheet,aiyazs_array_of_array=temp_aiyaz_array_of_array)
-        
+        result = start_extraction_add_pdf(
+            bank_names,
+            pdf_paths,
+            passwords,
+            start_date,
+            end_date,
+            CA_ID,
+            progress_data,
+            whole_transaction_sheet=whole_transaction_sheet,
+            aiyazs_array_of_array=temp_aiyaz_array_of_array,
+        )
+
         print("RESULT GENERATED")
         logger.info("Extraction completed successfully")
         return {
@@ -202,9 +224,9 @@ async def analyze_bank_statements(request: BankStatementRequest):
             "message": "Bank statements analyzed successfully",
             "data": result["sheets_in_json"],
             "pdf_paths_not_extracted": result["pdf_paths_not_extracted"],
-            "ner_results": ner_results, 
+            "ner_results": ner_results,
             "success_page_number": result["success_page_number"],
-            "missing_months_list":result["missing_months_list"]
+            "missing_months_list": result["missing_months_list"],
         }
 
     except Exception as e:
@@ -212,7 +234,6 @@ async def analyze_bank_statements(request: BankStatementRequest):
         raise HTTPException(
             status_code=500, detail=f"Error processing bank statements: {str(e)}"
         )
-    
 
 
 # @app.post("/column-rectify-add-pdf/")
@@ -239,7 +260,7 @@ async def analyze_bank_statements(request: BankStatementRequest):
 #                     f"must match number of PDFs ({len(request.pdf_paths)})"
 #                 ),
 #             )
-        
+
 #         temp_aiyaz_array_of_array = []
 #         for statement in request.aiyazs_array_of_array:
 #             temp_aiyaz_array = []
@@ -248,8 +269,7 @@ async def analyze_bank_statements(request: BankStatementRequest):
 #             temp_aiyaz_array_of_array.append(temp_aiyaz_array)
 
 
-        
-#         bank_names = request.bank_names 
+#         bank_names = request.bank_names
 #         pdf_paths = request.pdf_paths
 #         passwords =  request.passwords if request.passwords else []
 #         start_date = request.start_dates if request.start_dates else []
@@ -290,7 +310,7 @@ async def analyze_bank_statements(request: BankStatementRequest):
 #                 ner_results["Name"].append(fetched_name)
 #             else:
 #                 ner_results["Name"].append(f"Statement {person_count}")
-                
+
 #             if fetched_acc_num:
 #                 ner_results["Acc Number"].append(fetched_acc_num)
 #             else:
@@ -298,8 +318,6 @@ async def analyze_bank_statements(request: BankStatementRequest):
 #         print("Ner results", ner_results)
 #         end_ner = time.time()
 #         print("Time taken to process NER", end_ner-start_ner)
-
-
 
 
 #         logger.info("Starting extraction")
@@ -314,7 +332,7 @@ async def analyze_bank_statements(request: BankStatementRequest):
 #             "message": "Bank statements analyzed successfully",
 #             "data": result["sheets_in_json"],
 #             "pdf_paths_not_extracted": result["pdf_paths_not_extracted"],
-#             "ner_results": ner_results, 
+#             "ner_results": ner_results,
 #         }
 
 #     except Exception as e:
@@ -340,6 +358,7 @@ async def add_pdf(request: BankStatementRequest):
 async def health_check():
     return {"status": "healthy"}
 
+
 @app.post("/edit-category/")
 async def edit_category(request: EditCategoryRequest):
     try:
@@ -356,7 +375,9 @@ async def edit_category(request: EditCategoryRequest):
         # convert transaction_data to df
         transaction_df = pd.DataFrame(transaction_data)
         print("Transactions : ", transaction_df.head())
-        transaction_df["Value Date"] = pd.to_datetime(transaction_df["Value Date"], format="%d-%m-%Y")
+        transaction_df["Value Date"] = pd.to_datetime(
+            transaction_df["Value Date"], format="%d-%m-%Y"
+        )
         eod_df = pd.DataFrame(eod_data)
         print("Transactions : ", transaction_df.head())
         # print(eod_df.head())
@@ -374,7 +395,6 @@ async def edit_category(request: EditCategoryRequest):
         )
 
 
-
 @app.post("/excel-download/")
 async def excel_download(request: ExcelDownloadRequest):
     try:
@@ -387,7 +407,7 @@ async def excel_download(request: ExcelDownloadRequest):
         # convert transaction_data to df
         transaction_df = pd.DataFrame(transaction_data)
         name_n_num_df = pd.DataFrame(name_n_num_data)
-        
+
         print("Transactions : \n", transaction_df.head())
         print("Name and Number : \n", name_n_num_df.head())
 
@@ -398,13 +418,12 @@ async def excel_download(request: ExcelDownloadRequest):
             raise HTTPException(
                 status_code=404, detail="Something went wrong while generating the file"
             )
-    
+
         return file_path
     except Exception as e:
         logger.error(f"Error processing bank statements: {str(e)}")
-        raise HTTPException(
-            status_code=500, detail=f"{str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"{str(e)}")
+
 
 @app.post("/individual-summary/")
 async def individual_summary_api(request: InvididualSummaryRequest):
@@ -412,7 +431,9 @@ async def individual_summary_api(request: InvididualSummaryRequest):
         logger.info(f"Received request with data: {request.transactions_data}")
 
         transaction_df = pd.DataFrame(request.transactions_data)
-        transaction_df["Value Date"] = pd.to_datetime(transaction_df["Value Date"], format="%d-%m-%Y")
+        transaction_df["Value Date"] = pd.to_datetime(
+            transaction_df["Value Date"], format="%d-%m-%Y"
+        )
         print(transaction_df.head(10))
         data = individual_summary(transaction_df)
         print(data)
@@ -426,6 +447,7 @@ async def individual_summary_api(request: InvididualSummaryRequest):
             status_code=500, detail=f"Error processing bank statements: {str(e)}"
         )
 
+
 if __name__ == "__main__":
     # Optionally use environment variables for host/port. Falls back to "127.0.0.1" and 7500 if none provided.
     host = os.getenv("API_HOST", "127.0.0.1")
@@ -435,11 +457,10 @@ if __name__ == "__main__":
 
     # Clean up any old socket
     # if os.path.exists(uds_path):
-        # os.remove(uds_path)
+    # os.remove(uds_path)
 
     # Start the FastAPI server on the Unix socket
     # uvicorn.run("main:app", uds=uds_path, log_level="info", reload=False)
-
 
     # IMPORTANT: reload=False for production usage
     # import time

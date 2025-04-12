@@ -13,4 +13,14 @@ urlpatterns = [
     path("", include(router.urls)),
     # Add any non-viewset API endpoints here
     path("health/", views.health_check, name="health_check"),
+    path(
+        "analyze-statements/",
+        views.BankStatementAnalysisView.as_view(),
+        name="analyze_statements",
+    ),
+    path(
+        "excel-download/",
+        views.BankStatementExcelDownloadView.as_view(),
+        name="excel_download",
+    ),
 ]

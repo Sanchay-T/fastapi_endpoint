@@ -2,7 +2,6 @@ import shutil
 import os
 from lib2to3.pytree import convert
 from openpyxl.styles import Font
-import logging
 from openpyxl import Workbook, load_workbook
 import sys
 import json
@@ -10,6 +9,9 @@ import pandas as pd
 import regex as re
 import fitz
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 bold_font = Font(bold=True)
@@ -19,26 +21,59 @@ pd.set_option("display.max_rows", None)
 pd.set_option("display.width", None)
 BASE_DIR = os.path.dirname(os.path.abspath(os.path.join(__file__, "../../../")))
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../..")))
-from ...utils import get_saved_pdf_dir, get_saved_excel_dir
+from statement_analyzer.utils import get_saved_pdf_dir, get_saved_excel_dir
 
 # from findaddy.exceptions import ExtractionError
 TEMP_SAVED_PDF_DIR = get_saved_pdf_dir()
 TEMP_SAVED_EXCEL_DIR = get_saved_excel_dir()
 
-from ...common_functions import (process_excel_to_json, process_name_n_num_df, category_add_ca,
-                                 another_method, Upi, eod, opening_and_closing_bal, summary_sheet,
-                                 transaction_sheet, total_investment, redemption_investment,
-                                 creditor_list, debtor_list, cash_withdraw, cash_depo, div_int, emi,
-                                 refund_reversal, suspense_credit, suspense_debit, payment, receipt,
-                                 calculate_fixed_day_average, process_avg_last_6_months, extraction_process,
-                                 color_summary_sheet, format_numbers_with_commas,
-                                 adjust_column_widths_for_varied_sheets,
-                                 Summary_note, Investment_note, CreditorList_note, DebtorList_note,
-                                 CashWithdrawalt_note,
-                                 Cash_Deposit_note, Emi_note, Refund_note, Suspense_Credit_note, Suspense_Debit_note,
-                                 add_filters_to_excel, create_excel_sheet, color_excel_tabs_inplace,
-                                 sort_dataframes_by_date,
-                                 extraction_process_explicit_lines, process_transactions, get_total_pdf_pages)
+from statement_analyzer.common_functions import (
+    process_excel_to_json,
+    process_name_n_num_df,
+    category_add_ca,
+    another_method,
+    Upi,
+    eod,
+    opening_and_closing_bal,
+    summary_sheet,
+    transaction_sheet,
+    total_investment,
+    redemption_investment,
+    creditor_list,
+    debtor_list,
+    cash_withdraw,
+    cash_depo,
+    div_int,
+    emi,
+    refund_reversal,
+    suspense_credit,
+    suspense_debit,
+    payment,
+    receipt,
+    calculate_fixed_day_average,
+    process_avg_last_6_months,
+    extraction_process,
+    color_summary_sheet,
+    format_numbers_with_commas,
+    adjust_column_widths_for_varied_sheets,
+    Summary_note,
+    Investment_note,
+    CreditorList_note,
+    DebtorList_note,
+    CashWithdrawalt_note,
+    Cash_Deposit_note,
+    Emi_note,
+    Refund_note,
+    Suspense_Credit_note,
+    Suspense_Debit_note,
+    add_filters_to_excel,
+    create_excel_sheet,
+    color_excel_tabs_inplace,
+    sort_dataframes_by_date,
+    extraction_process_explicit_lines,
+    process_transactions,
+    get_total_pdf_pages,
+)
 
 
 def save_to_excel(df, name_n_num_df, account_number):
@@ -46,7 +81,9 @@ def save_to_excel(df, name_n_num_df, account_number):
     eod_sheet_df = eod(df)
     opening_bal, closing_bal = opening_and_closing_bal(eod_sheet_df)
 
-    summary_df_list, missing_months_list = summary_sheet(df, opening_bal, closing_bal, df)
+    summary_df_list, missing_months_list = summary_sheet(
+        df, opening_bal, closing_bal, df
+    )
 
     particulars_df = summary_df_list[0]
     income_receipts_df = summary_df_list[1]
@@ -55,14 +92,20 @@ def save_to_excel(df, name_n_num_df, account_number):
     contra_credit_df = summary_df_list[4]
     contra_debit_df = summary_df_list[5]
 
-    df['Value Date'] = pd.to_datetime(df['Value Date'], format='%d-%m-%Y').dt.strftime('%d-%m-%Y')
+    df["Value Date"] = pd.to_datetime(df["Value Date"], format="%d-%m-%Y").dt.strftime(
+        "%d-%m-%Y"
+    )
     transaction_sheet_df = transaction_sheet(df)
     investment_df = total_investment(df)
     creditor_df = creditor_list(df)
     debtor_df = debtor_list(transaction_sheet_df)
 
-    upi_cr_df = df[(df["Description"].str.contains("UPI", case=False)) & (df["Credit"] > 0)]
-    upi_dr_df = df[(df["Description"].str.contains("UPI", case=False)) & (df["Debit"] > 0)]
+    upi_cr_df = df[
+        (df["Description"].str.contains("UPI", case=False)) & (df["Credit"] > 0)
+    ]
+    upi_dr_df = df[
+        (df["Description"].str.contains("UPI", case=False)) & (df["Debit"] > 0)
+    ]
 
     cash_withdrawal_df = cash_withdraw(df)
     cash_deposit_df = cash_depo(df)
@@ -79,7 +122,9 @@ def save_to_excel(df, name_n_num_df, account_number):
     loan_value_df = process_avg_last_6_months(bank_avg_balance_df, eod_sheet_df)
 
     os.makedirs(TEMP_SAVED_EXCEL_DIR, exist_ok=True)
-    filename = os.path.join(TEMP_SAVED_EXCEL_DIR, f"Bank_{account_number}_Extracted_statements_file.xlsx")
+    filename = os.path.join(
+        TEMP_SAVED_EXCEL_DIR, f"Bank_{account_number}_Extracted_statements_file.xlsx"
+    )
 
     writer = pd.ExcelWriter(filename, engine="xlsxwriter")
 
@@ -103,19 +148,19 @@ def save_to_excel(df, name_n_num_df, account_number):
         writer,
         sheet_name=sheet_name,
         startrow=name_n_num_df.shape[0]
-                 + particulars_df.shape[0]
-                 + income_receipts_df.shape[0]
-                 + 6,
+        + particulars_df.shape[0]
+        + income_receipts_df.shape[0]
+        + 6,
         index=False,
     )
     other_expenses_df.to_excel(
         writer,
         sheet_name=sheet_name,
         startrow=name_n_num_df.shape[0]
-                 + particulars_df.shape[0]
-                 + income_receipts_df.shape[0]
-                 + imp_expenses_payments_df.shape[0]
-                 + 8,
+        + particulars_df.shape[0]
+        + income_receipts_df.shape[0]
+        + imp_expenses_payments_df.shape[0]
+        + 8,
         index=False,
     )
 
@@ -123,11 +168,11 @@ def save_to_excel(df, name_n_num_df, account_number):
         writer,
         sheet_name=sheet_name,
         startrow=name_n_num_df.shape[0]
-                 + particulars_df.shape[0]
-                 + income_receipts_df.shape[0]
-                 + imp_expenses_payments_df.shape[0]
-                 + other_expenses_df.shape[0]
-                 + 10,
+        + particulars_df.shape[0]
+        + income_receipts_df.shape[0]
+        + imp_expenses_payments_df.shape[0]
+        + other_expenses_df.shape[0]
+        + 10,
         index=False,
     )
 
@@ -135,31 +180,35 @@ def save_to_excel(df, name_n_num_df, account_number):
         writer,
         sheet_name=sheet_name,
         startrow=name_n_num_df.shape[0]
-                 + particulars_df.shape[0]
-                 + income_receipts_df.shape[0]
-                 + imp_expenses_payments_df.shape[0]
-                 + other_expenses_df.shape[0]
-                 + contra_credit_df.shape[0]
-                 + 12,
+        + particulars_df.shape[0]
+        + income_receipts_df.shape[0]
+        + imp_expenses_payments_df.shape[0]
+        + other_expenses_df.shape[0]
+        + contra_credit_df.shape[0]
+        + 12,
         index=False,
     )
 
-    loan_value_df.to_excel(writer, sheet_name='Opportunity to Earn', index=False)
-    transaction_sheet_df.to_excel(writer, sheet_name='Transactions', index=False)
-    eod_sheet_df.to_excel(writer, sheet_name='EOD', index=False)
-    investment_df.to_excel(writer, sheet_name='Investment', index=False)
-    creditor_df.to_excel(writer, sheet_name='Creditors', index=False)
-    debtor_df.to_excel(writer, sheet_name='Debtors', index=False)
-    upi_cr_df.to_excel(writer, sheet_name='UPI-CR', index=False)
-    upi_dr_df.to_excel(writer, sheet_name='UPI-DR', index=False)
-    cash_withdrawal_df.to_excel(writer, sheet_name='Cash Withdrawal', index=False)
-    cash_deposit_df.to_excel(writer, sheet_name='Cash Deposit', index=False)
-    dividend_int_df.to_excel(writer, sheet_name='Redemption, Dividend & Interest', index=False)
-    emi_df.to_excel(writer, sheet_name='Probable EMI', index=False)
-    refund_df.to_excel(writer, sheet_name='Refund-Reversal', index=False)
-    suspense_credit_df.to_excel(writer, sheet_name='Suspense Credit', index=False)
-    suspense_debit_df.to_excel(writer, sheet_name='Suspense Debit', index=False)
-    pay_n_receipt_df.to_excel(writer, sheet_name='Payment & Receipt Voucher', index=False)
+    loan_value_df.to_excel(writer, sheet_name="Opportunity to Earn", index=False)
+    transaction_sheet_df.to_excel(writer, sheet_name="Transactions", index=False)
+    eod_sheet_df.to_excel(writer, sheet_name="EOD", index=False)
+    investment_df.to_excel(writer, sheet_name="Investment", index=False)
+    creditor_df.to_excel(writer, sheet_name="Creditors", index=False)
+    debtor_df.to_excel(writer, sheet_name="Debtors", index=False)
+    upi_cr_df.to_excel(writer, sheet_name="UPI-CR", index=False)
+    upi_dr_df.to_excel(writer, sheet_name="UPI-DR", index=False)
+    cash_withdrawal_df.to_excel(writer, sheet_name="Cash Withdrawal", index=False)
+    cash_deposit_df.to_excel(writer, sheet_name="Cash Deposit", index=False)
+    dividend_int_df.to_excel(
+        writer, sheet_name="Redemption, Dividend & Interest", index=False
+    )
+    emi_df.to_excel(writer, sheet_name="Probable EMI", index=False)
+    refund_df.to_excel(writer, sheet_name="Refund-Reversal", index=False)
+    suspense_credit_df.to_excel(writer, sheet_name="Suspense Credit", index=False)
+    suspense_debit_df.to_excel(writer, sheet_name="Suspense Debit", index=False)
+    pay_n_receipt_df.to_excel(
+        writer, sheet_name="Payment & Receipt Voucher", index=False
+    )
     # payment_df.to_excel(writer, sheet_name='Payment Voucher', index=False)
     # receipt_df.to_excel(writer, sheet_name='Receipt Voucher', index=False)
     writer.close()
@@ -378,7 +427,6 @@ def save_to_excel(df, name_n_num_df, account_number):
             "D": 10,
             "E": 15,
             "F": 85,
-
         },
         "Payment_Receipt Voucher": {
             "A": 15,
@@ -434,7 +482,9 @@ def returns_json_output_of_all_sheets(df, name_n_num_df):
     eod_sheet_df = eod(df)
     opening_bal, closing_bal = opening_and_closing_bal(eod_sheet_df)
 
-    summary_df_list, missing_months_list = summary_sheet(df, opening_bal, closing_bal, df)
+    summary_df_list, missing_months_list = summary_sheet(
+        df, opening_bal, closing_bal, df
+    )
 
     particulars_df = summary_df_list[0]
     income_receipts_df = summary_df_list[1]
@@ -443,14 +493,18 @@ def returns_json_output_of_all_sheets(df, name_n_num_df):
     contra_credit_df = summary_df_list[4]
     contra_debit_df = summary_df_list[5]
 
-    df['Value Date'] = pd.to_datetime(df['Value Date']).dt.strftime('%d-%m-%Y')
+    df["Value Date"] = pd.to_datetime(df["Value Date"]).dt.strftime("%d-%m-%Y")
     transaction_sheet_df = transaction_sheet(df)
     investment_df = total_investment(df)
     creditor_df = creditor_list(df)
     debtor_df = debtor_list(transaction_sheet_df)
 
-    upi_cr_df = df[(df["Description"].str.contains("UPI", case=False)) & (df["Credit"] > 0)]
-    upi_dr_df = df[(df["Description"].str.contains("UPI", case=False)) & (df["Debit"] > 0)]
+    upi_cr_df = df[
+        (df["Description"].str.contains("UPI", case=False)) & (df["Credit"] > 0)
+    ]
+    upi_dr_df = df[
+        (df["Description"].str.contains("UPI", case=False)) & (df["Debit"] > 0)
+    ]
 
     cash_withdrawal_df = cash_withdraw(df)
     cash_deposit_df = cash_depo(df)
@@ -496,20 +550,25 @@ def returns_json_output_of_all_sheets(df, name_n_num_df):
     }
 
     # Convert the entire dictionary to JSON
-    json_output = json.dumps(result_dict, indent=4)
-    with open("new_output.json", "w") as file:
-        file.write(json_output)
-    return json_output, missing_months_list
+    # json_output = json.dumps(result_dict, indent=4)
+    # with open("new_output.json", "w") as file:
+    #     file.write(json_output)
+    # return json_output, missing_months_list
+    return result_dict, missing_months_list  # Return the dictionary directly
 
 
-def refresh_category_all_sheets(df,eod_sheet_df, new_categories):
+def refresh_category_all_sheets(df, eod_sheet_df, new_categories):
     # eod_sheet_df = eod(df)
     opening_bal, closing_bal = opening_and_closing_bal(eod_sheet_df)
 
     if not new_categories:
-        summary_df_list, missing_months_list = summary_sheet(df, opening_bal, closing_bal, df)
+        summary_df_list, missing_months_list = summary_sheet(
+            df, opening_bal, closing_bal, df
+        )
     else:
-        summary_df_list, missing_months_list = summary_sheet(df, opening_bal, closing_bal, df, new_categories)
+        summary_df_list, missing_months_list = summary_sheet(
+            df, opening_bal, closing_bal, df, new_categories
+        )
 
     particulars_df = summary_df_list[0]
     income_receipts_df = summary_df_list[1]
@@ -518,7 +577,7 @@ def refresh_category_all_sheets(df,eod_sheet_df, new_categories):
     contra_credit_df = summary_df_list[4]
     contra_debit_df = summary_df_list[5]
 
-    df['Value Date'] = pd.to_datetime(df['Value Date']).dt.strftime('%d-%m-%Y')
+    df["Value Date"] = pd.to_datetime(df["Value Date"]).dt.strftime("%d-%m-%Y")
     # transaction_sheet_df = transaction_sheet(df)
     # investment_df = total_investment(df)
     # creditor_df = creditor_list(df)
@@ -569,29 +628,35 @@ def refresh_category_all_sheets(df,eod_sheet_df, new_categories):
     }
 
     # Convert the entire dictionary to JSON
-    json_output = json.dumps(result_dict, indent=4)
-
-    return json_output
+    # json_output = json.dumps(result_dict, indent=4)
+    # with open("new_output.json", "w") as file:
+    #     file.write(json_output)
+    # return json_output
+    return result_dict, missing_months_list  # Return the dictionary directly
 
 
 def individual_summary(transactions_df):
-    
-    transactions_df.rename(columns={
-        "description": "Description",
-        "category": "Category",
-        "entity": "Entity",
-        "voucher_type": "Voucher type"
-    }, inplace=True)
-    
+
+    transactions_df.rename(
+        columns={
+            "description": "Description",
+            "category": "Category",
+            "entity": "Entity",
+            "voucher_type": "Voucher type",
+        },
+        inplace=True,
+    )
+
     eod_sheet_df = eod(transactions_df)
     print(eod_sheet_df.head(10))
     opening_bal, closing_bal = opening_and_closing_bal(eod_sheet_df)
-    # named print 
+    # named print
     print("opening_bal", opening_bal)
     print("closing_bal", closing_bal)
 
-
-    summary_df_list,mission_months = summary_sheet(transactions_df, opening_bal, closing_bal, transactions_df)
+    summary_df_list, mission_months = summary_sheet(
+        transactions_df, opening_bal, closing_bal, transactions_df
+    )
 
     print("summary_df_list", len(summary_df_list))
     particulars_df = summary_df_list[0]
@@ -619,10 +684,19 @@ def individual_summary(transactions_df):
     json_output = json.dumps(result_dict, indent=4)
 
     return json_output
-    
 
-def start_extraction_add_pdf(bank_names, pdf_paths, passwords, start_dates, end_dates, CA_ID, progress_data,
-                             whole_transaction_sheet=None, aiyazs_array_of_array=None):
+
+def start_extraction_add_pdf(
+    bank_names,
+    pdf_paths,
+    passwords,
+    start_dates,
+    end_dates,
+    CA_ID,
+    progress_data,
+    whole_transaction_sheet=None,
+    aiyazs_array_of_array=None,
+):
     account_number = ""
     dfs = {}
     name_dfs = {}
@@ -635,7 +709,7 @@ def start_extraction_add_pdf(bank_names, pdf_paths, passwords, start_dates, end_
         "start_dates": [],
         "end_dates": [],
         "respective_list_of_columns": [],
-        "respective_reasons_for_error": []
+        "respective_reasons_for_error": [],
     }
     i = 0
 
@@ -648,18 +722,35 @@ def start_extraction_add_pdf(bank_names, pdf_paths, passwords, start_dates, end_
 
         if aiyazs_array_of_array:
             aiyaz_array_of_array = aiyazs_array_of_array[i]
-            print("aiyaz_array_of_array from ca statement analyzer - ", aiyaz_array_of_array)
+            print(
+                "aiyaz_array_of_array from ca statement analyzer - ",
+                aiyaz_array_of_array,
+            )
             # Iterate through the columns to extract start and end coordinates
             explicit_lines = list(
-                {coord for item in aiyaz_array_of_array for coord in (item["bounds"]["start"], item["bounds"]["end"])})
-            labels = [[entry["index"], entry["column_type"]] for entry in aiyaz_array_of_array]
-            dfs[bank], name_dfs[bank], errorz[bank] = extraction_process_explicit_lines(bank, pdf_path, pdf_password,
-                                                                                        start_date, end_date,
-                                                                                        explicit_lines, labels)
+                {
+                    coord
+                    for item in aiyaz_array_of_array
+                    for coord in (item["bounds"]["start"], item["bounds"]["end"])
+                }
+            )
+            labels = [
+                [entry["index"], entry["column_type"]] for entry in aiyaz_array_of_array
+            ]
+            dfs[bank], name_dfs[bank], errorz[bank] = extraction_process_explicit_lines(
+                bank,
+                pdf_path,
+                pdf_password,
+                start_date,
+                end_date,
+                explicit_lines,
+                labels,
+            )
 
         else:
-            dfs[bank], name_dfs[bank], errorz[bank] = extraction_process(bank, pdf_path, pdf_password, start_date,
-                                                                         end_date)
+            dfs[bank], name_dfs[bank], errorz[bank] = extraction_process(
+                bank, pdf_path, pdf_password, start_date, end_date
+            )
 
         print(f"Extracted {bank} bank statement successfully")
         # account_number += f"{name_dfs[bank][1][:4]}x{name_dfs[bank][1][-4:]}_"
@@ -705,8 +796,12 @@ def start_extraction_add_pdf(bank_names, pdf_paths, passwords, start_dates, end_
         except Exception as e:
             print(f"Failed to remove '{folder_path}': {e}")
 
-        return {"sheets_in_json": None, 'pdf_paths_not_extracted': pdf_paths_not_extracted, 'success_page_number': 0,
-                'missing_months_list': []}
+        return {
+            "sheets_in_json": None,
+            "pdf_paths_not_extracted": pdf_paths_not_extracted,
+            "success_page_number": 0,
+            "missing_months_list": [],
+        }
 
     else:
         data = []
@@ -733,7 +828,11 @@ def start_extraction_add_pdf(bank_names, pdf_paths, passwords, start_dates, end_
             list_of_dataframes.append(whole_transaction_sheet)
 
         # arrange dfs
-        initial_df = pd.concat(sort_dataframes_by_date(list_of_dataframes)).fillna("").reset_index(drop=True)
+        initial_df = (
+            pd.concat(sort_dataframes_by_date(list_of_dataframes))
+            .fillna("")
+            .reset_index(drop=True)
+        )
         initial_df = initial_df.drop_duplicates(keep="first")
         df = category_add_ca(initial_df)
         new_tran_df = another_method(df)
@@ -742,13 +841,15 @@ def start_extraction_add_pdf(bank_names, pdf_paths, passwords, start_dates, end_
         # print(new_tran_df)
         #############################------------------------#######################################
 
-        json_lists_of_df, missing_months_list = returns_json_output_of_all_sheets(new_tran_df, name_n_num_df)
+        json_lists_of_df, missing_months_list = returns_json_output_of_all_sheets(
+            new_tran_df, name_n_num_df
+        )
 
         # excel_file_path = save_to_excel(new_tran_df, name_n_num_df, account_number)
         # print(excel_file_path)
 
         all_pdf_pages = get_total_pdf_pages(pdf_paths)
-        not_extracted_pages = get_total_pdf_pages(pdf_paths_not_extracted['paths'])
+        not_extracted_pages = get_total_pdf_pages(pdf_paths_not_extracted["paths"])
         time_saved_pages = all_pdf_pages - not_extracted_pages
 
         folder_path = "saved_pdf"
@@ -763,8 +864,22 @@ def start_extraction_add_pdf(bank_names, pdf_paths, passwords, start_dates, end_
         print(pdf_paths_not_extracted)
         print("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%")
 
-        return {"sheets_in_json": json_lists_of_df, 'pdf_paths_not_extracted': pdf_paths_not_extracted,
-                'success_page_number': time_saved_pages, 'missing_months_list': missing_months_list}
+        # --- Add logging for the return value ---
+        # logger.info(f"[DEBUG] Returning sheets_in_json type: {type(json_lists_of_df)}")
+        # # Avoid logging potentially huge data, just log keys or a snippet if it's a string/dict
+        # if isinstance(json_lists_of_df, str):
+        #      logger.info(f"[DEBUG] sheets_in_json (string snippet): {json_lists_of_df[:500]}...")
+        # elif isinstance(json_lists_of_df, dict):
+        #      logger.info(f"[DEBUG] sheets_in_json keys: {list(json_lists_of_df.keys())}")
+        # --- End logging ---
+
+        return {
+            "sheets_in_json": json_lists_of_df,
+            "pdf_paths_not_extracted": pdf_paths_not_extracted,
+            "success_page_number": time_saved_pages,
+            "missing_months_list": missing_months_list,
+        }
+
 
 # # #
 # bank_names = ["ICICI"]

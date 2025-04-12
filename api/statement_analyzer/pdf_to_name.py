@@ -7,7 +7,8 @@ import logging
 
 logger = logging.getLogger(__name__)
 BASE_DIR = get_base_dir()
-logger.info("Base Dir : ", BASE_DIR)
+logger.info(f"Base Dir : {BASE_DIR}")
+
 
 def clean_line(line: str) -> str:
     """Clean a single line of text while preserving important information."""
@@ -22,7 +23,7 @@ def clean_line(line: str) -> str:
 def extract_entities(pdf_path: str, num_lines: int = 10):
     """Extract entities from PDF file and return only the entity texts."""
     try:
-        model_path  = os.path.join(BASE_DIR,"models","trained_model_lg_v2_final")
+        model_path = os.path.join(BASE_DIR, "models", "trained_model_lg_v2_final")
         # print(model_path)
         # model_path  = os.path.join("E:/Workplace/Bizpedia/ats_pyqt/cyphersol-ats-native-app" , "src","utils","trained_model_lg_v2_final")
         nlp = spacy.load(model_path)

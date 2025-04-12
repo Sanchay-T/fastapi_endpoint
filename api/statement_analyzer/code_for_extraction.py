@@ -13,12 +13,14 @@ from PIL import Image
 import pdfplumber
 from torchvision import transforms
 from huggingface_hub import hf_hub_download
+
 # import matplotlib
 # matplotlib.use("Agg")
 # from matplotlib.patches import Patch
 from PIL import ImageDraw
 from transformers import TableTransformerForObjectDetection
 from tqdm.auto import tqdm
+
 # import matplotlib.pyplot as plt
 # import matplotlib.patches as patches
 import os
@@ -27,16 +29,19 @@ from io import BytesIO
 from .old_bank_extractions import CustomStatement
 import re
 import uuid
+
 # from findaddy.exceptions import ExtractionError
 import logging
 from .utils import get_base_dir
 
 logger = logging.getLogger(__name__)
 BASE_DIR = get_base_dir()
-logger.info("Base Dir : ", BASE_DIR)
+logger.info(f"Base Dir : {BASE_DIR}")
 
 from .utils import get_saved_pdf_dir
+
 TEMP_SAVED_PDF_DIR = get_saved_pdf_dir()
+
 
 def __init__(bank_name, pdf_path, pdf_password, CA_ID):
     writer = None
@@ -48,16 +53,19 @@ def __init__(bank_name, pdf_path, pdf_password, CA_ID):
     CA_ID = CA_ID
     # customer = CustomStatement(bank_name, pdf_path, pdf_password, CA_ID)
 
+
 def load_new_first_page_function(pdf_document):
     """
     Trims the first page of the PDF from the point where 'date' and 'balance' keywords
     are found together downwards. If not found on the first page, checks the second and third pages,
     then terminates if not found. Keeps some distance above the line containing the keywords.
     """
-    date_pattern = re.compile(r'\b(date|value date|value)\b', re.IGNORECASE)
-    balance_pattern = re.compile(r'\b(balance|total amount)\b', re.IGNORECASE)
+    date_pattern = re.compile(r"\b(date|value date|value)\b", re.IGNORECASE)
+    balance_pattern = re.compile(r"\b(balance|total amount)\b", re.IGNORECASE)
 
-    for page_num in range(min(4, len(pdf_document))):  # Check up to the first three pages
+    for page_num in range(
+        min(4, len(pdf_document))
+    ):  # Check up to the first three pages
         page = pdf_document[page_num]  # Load the page
         text_blocks = page.get_text("blocks")  # Extract text blocks
 
@@ -95,7 +103,7 @@ def load_new_first_page_function(pdf_document):
                 page.mediabox.x0,  # Left boundary
                 crop_y,  # Top boundary (crop above this point with buffer)
                 page.mediabox.x1,  # Right boundary
-                page.mediabox.y1  # Bottom boundary
+                page.mediabox.y1,  # Bottom boundary
             )
 
             # Create a new document for the cropped page
@@ -107,6 +115,7 @@ def load_new_first_page_function(pdf_document):
             return cropped_doc
 
     return None  # Terminate if keywords are not found on the first three pages
+
 
 def load_first_page_into_memory(pdf_path):
     ca_id = "1234_temp"
@@ -170,18 +179,20 @@ def load_first_page_into_memory(pdf_path):
                 page.mediabox.x0,  # Left boundary
                 max(page.mediabox.y0, crop_y),  # Crop above this Y
                 page.mediabox.x1,  # Right boundary
-                page.mediabox.y1  # Top boundary
+                page.mediabox.y1,  # Top boundary
             )
 
             # Define output path for the cropped page
             output_page_path = os.path.join(
                 os.path.dirname(pdf_path),
-                f"{ca_id}_{selected_page_num + 1}_crop_{uuid.uuid4().hex}.pdf"
+                f"{ca_id}_{selected_page_num + 1}_crop_{uuid.uuid4().hex}.pdf",
             )
 
             # Save only the selected page as a new PDF
             with fitz.open() as single_page_pdf:
-                single_page_pdf.insert_pdf(pdf_doc, from_page=selected_page_num, to_page=selected_page_num)
+                single_page_pdf.insert_pdf(
+                    pdf_doc, from_page=selected_page_num, to_page=selected_page_num
+                )
                 cropped_page = single_page_pdf[0]
                 # Apply the crop to the saved page using the defined crop rectangle
                 cropped_page.set_cropbox(crop_rect)
@@ -192,6 +203,7 @@ def load_first_page_into_memory(pdf_path):
     except Exception as e:
         print(f"An error occurred: {e}")
         return None
+
 
 def flatten_page_rotation(page):
     """
@@ -241,6 +253,7 @@ def flatten_page_rotation(page):
     # 3) Finally, set /Rotate to 0 so the viewer doesn't rotate the page
     page[NameObject("/Rotate")] = NumberObject(0)
 
+
 def flatten_pdf_rotation(input_pdf_path, output_pdf_path):
 
     reader = PdfReader(input_pdf_path)
@@ -254,6 +267,7 @@ def flatten_pdf_rotation(input_pdf_path, output_pdf_path):
         writer.write(f)
 
     return output_pdf_path
+
 
 def unlock_and_add_margins_to_pdf(pdf_path, pdf_password, timestamp, CA_ID):
     margin = 0.3
@@ -299,7 +313,7 @@ def unlock_and_add_margins_to_pdf(pdf_path, pdf_password, timestamp, CA_ID):
                 rect.x0 - margin_pts,  # Left
                 rect.y0,  # Top (unchanged for now)
                 rect.x1 + margin_pts,  # Right
-                rect.y1  # Bottom (unchanged for now)
+                rect.y1,  # Bottom (unchanged for now)
             )
 
             # Set the new page size (media box) to the expanded dimensions
@@ -315,7 +329,9 @@ def unlock_and_add_margins_to_pdf(pdf_path, pdf_password, timestamp, CA_ID):
         text = first_page.get_text("text").strip()
 
         if not text or text == "CamScanner":
-            raise Exception("The PDF is of image-only (non-text) format. Please upload a text PDF.")
+            raise Exception(
+                "The PDF is of image-only (non-text) format. Please upload a text PDF."
+            )
         pdf_document.close()
         return unlocked_pdf_path
 
@@ -324,12 +340,13 @@ def unlock_and_add_margins_to_pdf(pdf_path, pdf_password, timestamp, CA_ID):
 
     finally:
         # Ensure all temporary documents are closed and cleaned up
-        if 'cropped_doc' in locals() and cropped_doc is not None:
+        if "cropped_doc" in locals() and cropped_doc is not None:
             cropped_doc.close()
-        if 'combined_doc' in locals() and combined_doc is not None:
+        if "combined_doc" in locals() and combined_doc is not None:
             combined_doc.close()
         if os.path.exists("combined_temp.pdf"):
             os.remove("combined_temp.pdf")
+
 
 def get_table_column_coordinates(pdf_path):
     page_num = 0
@@ -350,27 +367,36 @@ def get_table_column_coordinates(pdf_path):
             return []
 
         # Extract ALL vertical edges (before filtering)
-        column_all_coords = sorted(set(edge["x0"] for edge in table_finder.edges if edge["orientation"] == "v"))
+        column_all_coords = sorted(
+            set(edge["x0"] for edge in table_finder.edges if edge["orientation"] == "v")
+        )
 
         # Find the largest table based on area (width × height)
         largest_table = max(
             table_finder.tables,
-            key=lambda t: (t.bbox[2] - t.bbox[0]) * (t.bbox[3] - t.bbox[1])
+            key=lambda t: (t.bbox[2] - t.bbox[0]) * (t.bbox[3] - t.bbox[1]),
         )
 
         # Extract vertical edges within the largest table's bounding box with a tolerance
         table_xmin, table_ymin, table_xmax, table_ymax = largest_table.bbox
         tolerance = 5  # Allow a small tolerance for alignment issues
 
-        column_x_coords = sorted(set(
-            edge["x0"] for edge in table_finder.edges
-            if edge["orientation"] == "v" and
-            (table_xmin - tolerance) <= edge["x0"] <= (table_xmax + tolerance) and
-            "top" in edge and "bottom" in edge and
-            (table_ymin - tolerance) <= edge["top"] <= (table_ymax + tolerance) and
-            (table_ymin - tolerance) <= edge["bottom"] <= (table_ymax + tolerance) and
-            (edge["bottom"] - edge["top"]) > 0.5 * (table_ymax - table_ymin)  # Ensure significant edge length
-        ))
+        column_x_coords = sorted(
+            set(
+                edge["x0"]
+                for edge in table_finder.edges
+                if edge["orientation"] == "v"
+                and (table_xmin - tolerance) <= edge["x0"] <= (table_xmax + tolerance)
+                and "top" in edge
+                and "bottom" in edge
+                and (table_ymin - tolerance) <= edge["top"] <= (table_ymax + tolerance)
+                and (table_ymin - tolerance)
+                <= edge["bottom"]
+                <= (table_ymax + tolerance)
+                and (edge["bottom"] - edge["top"])
+                > 0.5 * (table_ymax - table_ymin)  # Ensure significant edge length
+            )
+        )
 
         if not column_x_coords and len(table_finder.tables) == 1:
             return column_all_coords
@@ -379,6 +405,7 @@ def get_table_column_coordinates(pdf_path):
             return column_all_coords
 
         return column_x_coords
+
 
 def get_table_column_coordinates_by_text(pdf_path):
     page_num = 0
@@ -398,27 +425,36 @@ def get_table_column_coordinates_by_text(pdf_path):
             return []
 
         # Extract ALL vertical edges (before filtering)
-        column_all_coords = sorted(set(edge["x0"] for edge in table_finder.edges if edge["orientation"] == "v"))
+        column_all_coords = sorted(
+            set(edge["x0"] for edge in table_finder.edges if edge["orientation"] == "v")
+        )
 
         # Find the largest table based on area (width × height)
         largest_table = max(
             table_finder.tables,
-            key=lambda t: (t.bbox[2] - t.bbox[0]) * (t.bbox[3] - t.bbox[1])
+            key=lambda t: (t.bbox[2] - t.bbox[0]) * (t.bbox[3] - t.bbox[1]),
         )
 
         # Extract vertical edges within the largest table's bounding box with a tolerance
         table_xmin, table_ymin, table_xmax, table_ymax = largest_table.bbox
         tolerance = 1  # Allow a small tolerance for alignment issues
 
-        column_x_coords = sorted(set(
-            edge["x0"] for edge in table_finder.edges
-            if edge["orientation"] == "v" and
-            (table_xmin - tolerance) <= edge["x0"] <= (table_xmax + tolerance) and
-            "top" in edge and "bottom" in edge and
-            (table_ymin - tolerance) <= edge["top"] <= (table_ymax + tolerance) and
-            (table_ymin - tolerance) <= edge["bottom"] <= (table_ymax + tolerance) and
-            (edge["bottom"] - edge["top"]) > 0.5 * (table_ymax - table_ymin)  # Ensure significant edge length
-        ))
+        column_x_coords = sorted(
+            set(
+                edge["x0"]
+                for edge in table_finder.edges
+                if edge["orientation"] == "v"
+                and (table_xmin - tolerance) <= edge["x0"] <= (table_xmax + tolerance)
+                and "top" in edge
+                and "bottom" in edge
+                and (table_ymin - tolerance) <= edge["top"] <= (table_ymax + tolerance)
+                and (table_ymin - tolerance)
+                <= edge["bottom"]
+                <= (table_ymax + tolerance)
+                and (edge["bottom"] - edge["top"])
+                > 0.5 * (table_ymax - table_ymin)  # Ensure significant edge length
+            )
+        )
 
         if not column_x_coords and len(table_finder.tables) == 1:
             return column_all_coords
@@ -427,6 +463,7 @@ def get_table_column_coordinates_by_text(pdf_path):
             return column_all_coords
 
         return column_x_coords
+
 
 ##____________AFTER EXTRACTION (cleaning)_________________
 def parse_date(date_string):
@@ -476,6 +513,7 @@ def parse_date(date_string):
             pass
     return None
 
+
 def extract_date_col_from_df(df):
     date_col = []
     for column in df.columns:
@@ -492,15 +530,31 @@ def extract_date_col_from_df(df):
                 d_col.append(column)
     return d_col
 
+
 def find_desc_column(df, date_cols):
     # Convert all entries in the DataFrame to lowercase strings
     df = df.applymap(lambda x: str(x).lower())
     desc = []
     keywords = [
-        "description", "escription", "scription", "descr", "descrip",
-        "narration", "arration", "rration", "narrati", "narrat",
-        "particular", "articular", "rticular", "particul",
-        "detail", "remark", "remar", "emark", "naration",
+        "description",
+        "escription",
+        "scription",
+        "descr",
+        "descrip",
+        "narration",
+        "arration",
+        "rration",
+        "narrati",
+        "narrat",
+        "particular",
+        "articular",
+        "rticular",
+        "particul",
+        "detail",
+        "remark",
+        "remar",
+        "emark",
+        "naration",
     ]
 
     # Iterate over each row
@@ -515,6 +569,7 @@ def find_desc_column(df, date_cols):
 
     return list(desc)
 
+
 def find_debit_column(df, desc_col, date_col, bal_column):
     # Convert all entries in the DataFrame to lowercase strings
     df = df.applymap(lambda x: str(x).lower())
@@ -525,7 +580,11 @@ def find_debit_column(df, desc_col, date_col, bal_column):
     for index, row in df.head(60).iterrows():
         # Iterate over each column in the row
         for column_number, cell in enumerate(row):
-            if column_number in desc_col or column_number in date_col or column_number in bal_column:
+            if (
+                column_number in desc_col
+                or column_number in date_col
+                or column_number in bal_column
+            ):
                 continue
             if any(keyword in cell for keyword in keywords):
                 deb.append(column_number)
@@ -534,10 +593,11 @@ def find_debit_column(df, desc_col, date_col, bal_column):
     # Return unique column indices
     return deb
 
+
 def find_credit_column(df, desc_col, date_col, bal_column):
     # Convert all entries in the DataFrame to lowercase strings
     df = df.applymap(lambda x: str(x).lower())
-    df = df.applymap(lambda x: re.sub(r'\bscroll\b', '', str(x), flags=re.IGNORECASE))
+    df = df.applymap(lambda x: re.sub(r"\bscroll\b", "", str(x), flags=re.IGNORECASE))
     cred = []
     keywords = ["deposit", "credit", "cr amount", "depo", "cr"]
 
@@ -545,7 +605,11 @@ def find_credit_column(df, desc_col, date_col, bal_column):
     for index, row in df.head(60).iterrows():
         # Iterate over each column in the row
         for column_number, cell in enumerate(row):
-            if column_number in desc_col or column_number in date_col or column_number in bal_column:
+            if (
+                column_number in desc_col
+                or column_number in date_col
+                or column_number in bal_column
+            ):
                 continue
             if any(keyword in cell for keyword in keywords):
                 cred.append(column_number)
@@ -553,6 +617,7 @@ def find_credit_column(df, desc_col, date_col, bal_column):
 
     # Return unique column indices
     return cred
+
 
 def find_balance_column(df, desc_col, date_col):
     # Convert all entries in the DataFrame to lowercase strings
@@ -574,16 +639,18 @@ def find_balance_column(df, desc_col, date_col):
     # Return unique column indices
     return bal
 
+
 def check_date(df):
     df.dropna(subset=["Value Date"], inplace=True)
     if pd.to_datetime(df["Value Date"].iloc[-1], dayfirst=True) < pd.to_datetime(
-            df["Value Date"].iloc[0], dayfirst=True
+        df["Value Date"].iloc[0], dayfirst=True
     ):
         new_df = df[::-1].reset_index(drop=True)
         print("found in reverse")
     else:
         new_df = df.copy()  # No reversal required
     return new_df
+
 
 def cleaning(new_df):
 
@@ -657,36 +724,41 @@ def cleaning(new_df):
     df["Debit"] = pd.to_numeric(df["Debit"], errors="coerce")
     df["Credit"] = pd.to_numeric(df["Credit"], errors="coerce")
     df["Balance"] = pd.to_numeric(df["Balance"], errors="coerce")
-    df['Description'] = df['Description'].astype(str)
+    df["Description"] = df["Description"].astype(str)
 
     # this is the code to merge lines that have been cut by separators
     # Iterate through the DataFrame and combine descriptions
     last_valid_row = None
     for i in range(len(df)):
-        if pd.notna(df.loc[i, 'Value Date']):
+        if pd.notna(df.loc[i, "Value Date"]):
             last_valid_row = i
         elif last_valid_row is not None:
-            current_description = df.loc[i, 'Description'] if pd.notna(df.loc[i, 'Description']) else ''
-            df.at[last_valid_row, 'Description'] += ' ' + current_description
+            current_description = (
+                df.loc[i, "Description"] if pd.notna(df.loc[i, "Description"]) else ""
+            )
+            df.at[last_valid_row, "Description"] += " " + current_description
 
     # Drop the rows where 'Value Date' is NaN (these rows are now redundant)
     # df_cleaned = df.dropna(subset=['Value Date']).reset_index(drop=True)
     # df = df_cleaned.drop_duplicates(subset="new_column").reset_index(drop=True)
 
     df = check_date(df)
-    df = df[df['Balance'].notna() & (df['Balance'] != "")]
-    
-    df = df[~(
-        ((df["Debit"].fillna(0) == 0) & (df["Credit"].fillna(0) == 0)) |
-        ((df["Debit"].fillna(0) > 0) & (df["Credit"].fillna(0) > 0)) |
-        ((df["Debit"].fillna(0) < 0) & (df["Credit"].fillna(0) < 0))
-    )]
+    df = df[df["Balance"].notna() & (df["Balance"] != "")]
+
+    df = df[
+        ~(
+            ((df["Debit"].fillna(0) == 0) & (df["Credit"].fillna(0) == 0))
+            | ((df["Debit"].fillna(0) > 0) & (df["Credit"].fillna(0) > 0))
+            | ((df["Debit"].fillna(0) < 0) & (df["Credit"].fillna(0) < 0))
+        )
+    ]
 
     df = df[["Value Date", "Description", "Debit", "Credit", "Balance"]]
     # df = df.drop_duplicates()
     idf = df.reset_index(drop=True)
 
     return idf
+
 
 def credit_debit(df, description_column, date_column, bal_column, same_column):
     def classify_column(column):
@@ -698,12 +770,31 @@ def credit_debit(df, description_column, date_column, bal_column, same_column):
 
         # Case 1: Count occurrences where the value is only "CR", "DR", "CR.", or "DR."
         case1_count = values.isin(
-            ["CR", "DR", "CR.", "DR.", "Credit", "Debit", "cr", "dr", "Cr", "Dr", "C", "D", "C.", "D.", "credit",
-             "debit"]).sum()
+            [
+                "CR",
+                "DR",
+                "CR.",
+                "DR.",
+                "Credit",
+                "Debit",
+                "cr",
+                "dr",
+                "Cr",
+                "Dr",
+                "C",
+                "D",
+                "C.",
+                "D.",
+                "credit",
+                "debit",
+            ]
+        ).sum()
 
         # Case 2: Count occurrences where the value contains both a number and "CR" or "DR"
 
-        case2_count = values.str.contains(r'^[+-]?\d+.*(CR|DR|Credit|Debit|C|D)?', regex=True).sum()
+        case2_count = values.str.contains(
+            r"^[+-]?\d+.*(CR|DR|Credit|Debit|C|D)?", regex=True
+        ).sum()
         # print(case2_count)
 
         # Return the case based on counts
@@ -724,7 +815,11 @@ def credit_debit(df, description_column, date_column, bal_column, same_column):
         for index, row in df.head(30).iterrows():
             # Iterate over each column in the row
             for column_number, cell in enumerate(row):
-                if column_number in desc_col or column_number in date_col or column_number in bal_column:
+                if (
+                    column_number in desc_col
+                    or column_number in date_col
+                    or column_number in bal_column
+                ):
                     continue
                 if any(keyword in cell for keyword in keywords):
                     amount_col.append(column_number)
@@ -740,13 +835,21 @@ def credit_debit(df, description_column, date_column, bal_column, same_column):
         print("5 or more occurrences of case 1 found")
 
         # Find the column containing the keyword 'amount'
-        amount_column = find_amount_column(df, description_column, date_column, bal_column)
+        amount_column = find_amount_column(
+            df, description_column, date_column, bal_column
+        )
 
         if amount_column:
             print(f"Found 'amount' column: {amount_column}")
             # Call the crdr_to_credit_debit_columns function with the found amount column
-            new_df = crdr_to_credit_debit_columns(df, description_column, date_column, bal_column, amount_column,
-                                                       same_column)
+            new_df = crdr_to_credit_debit_columns(
+                df,
+                description_column,
+                date_column,
+                bal_column,
+                amount_column,
+                same_column,
+            )
             return new_df
         else:
             print("No 'amount' column found")
@@ -756,33 +859,54 @@ def credit_debit(df, description_column, date_column, bal_column, same_column):
         print("5 or more occurrences of case 2 found")
 
         # Vectorized split of numeric part and "CR/DR" part using regex
-        df['A'] = df[same_column].str.extract(r'([\d,]+\.?\d*)')[0].str.replace(',', '')
-        df['A'] = pd.to_numeric(df['A'], errors='coerce')  # Convert to float, ignoring errors
-        df['B'] = df[same_column].str.extract(r'(CR|DR|Credit|Debit|C|D|\+|\-)', flags=re.IGNORECASE)[0].str.upper()
+        df["A"] = df[same_column].str.extract(r"([\d,]+\.?\d*)")[0].str.replace(",", "")
+        df["A"] = pd.to_numeric(
+            df["A"], errors="coerce"
+        )  # Convert to float, ignoring errors
+        df["B"] = (
+            df[same_column]
+            .str.extract(r"(CR|DR|Credit|Debit|C|D|\+|\-)", flags=re.IGNORECASE)[0]
+            .str.upper()
+        )
         # Now call the crdr_to_credit_debit_columns function with new columns 'A' and 'B'
-        new_df = crdr_to_credit_debit_columns(df, description_column, date_column, bal_column, 'A', 'B')
+        new_df = crdr_to_credit_debit_columns(
+            df, description_column, date_column, bal_column, "A", "B"
+        )
         return new_df
 
     else:
         print("Fewer than 5 occurrences of either case")
         return None
 
-def crdr_to_credit_debit_columns(df, description_column, date_column, bal_column, amount_column, keyword_column):
+
+def crdr_to_credit_debit_columns(
+    df, description_column, date_column, bal_column, amount_column, keyword_column
+):
     # Vectorized assignment of Debit and Credit columns|\+|\-
-    debit_keywords = r'(?i)^(DR|Debit|dr|debit|D|\-|D\.)$'
-    credit_keywords = r'(?i)^(CR|Credit|cr|credit|C|\+|C\.)$'
+    debit_keywords = r"(?i)^(DR|Debit|dr|debit|D|\-|D\.)$"
+    credit_keywords = r"(?i)^(CR|Credit|cr|credit|C|\+|C\.)$"
 
     # Update the Debit and Credit columns
-    df['Debit'] = np.where(df[keyword_column].str.contains(debit_keywords, regex=True, na=False), df[amount_column], 0)
-    df['Credit'] = np.where(df[keyword_column].str.contains(credit_keywords, regex=True, na=False), df[amount_column],
-                            0)
+    df["Debit"] = np.where(
+        df[keyword_column].str.contains(debit_keywords, regex=True, na=False),
+        df[amount_column],
+        0,
+    )
+    df["Credit"] = np.where(
+        df[keyword_column].str.contains(credit_keywords, regex=True, na=False),
+        df[amount_column],
+        0,
+    )
 
     # Construct the final DataFrame efficiently
-    final_df = df[[date_column[0], description_column[0], 'Debit', 'Credit', bal_column[0]]].copy()
+    final_df = df[
+        [date_column[0], description_column[0], "Debit", "Credit", bal_column[0]]
+    ].copy()
     # Rename all columns in order
     final_df.columns = ["Value Date", "Description", "Debit", "Credit", "Balance"]
 
     return final_df
+
 
 def extract_text_from_pdf(unlocked_file_path):
     with pdfplumber.open(unlocked_file_path) as pdf:
@@ -790,7 +914,9 @@ def extract_text_from_pdf(unlocked_file_path):
         text = first_page.extract_text()
         return text.strip() if text else None
 
+
 ##____________AFTER EXTRACTION (cleaning)_________________
+
 
 ##____________COLUMN SEPARATORS_______________________
 def pdf_to_images(pdf_path):
@@ -805,48 +931,51 @@ def pdf_to_images(pdf_path):
 
     return images
 
+
 def outputs_to_objects(outputs, img_size, id2label):
     m = outputs.logits.softmax(-1).max(-1)
     pred_labels = list(m.indices.detach().cpu().numpy())[0]
     pred_scores = list(m.values.detach().cpu().numpy())[0]
-    pred_bboxes = outputs['pred_boxes'].detach().cpu()[0]
+    pred_bboxes = outputs["pred_boxes"].detach().cpu()[0]
 
     # Convert bounding boxes from cxcywh to xyxy
     x_c, y_c, w, h = pred_bboxes.unbind(-1)
-    pred_bboxes = torch.stack([
-        x_c - 0.5 * w,
-        y_c - 0.5 * h,
-        x_c + 0.5 * w,
-        y_c + 0.5 * h
-    ], dim=-1)
+    pred_bboxes = torch.stack(
+        [x_c - 0.5 * w, y_c - 0.5 * h, x_c + 0.5 * w, y_c + 0.5 * h], dim=-1
+    )
 
     # Rescale bounding boxes to the image size
-    scale_factors = torch.tensor([img_size[0], img_size[1], img_size[0], img_size[1]], dtype=torch.float32)
+    scale_factors = torch.tensor(
+        [img_size[0], img_size[1], img_size[0], img_size[1]], dtype=torch.float32
+    )
     pred_bboxes = pred_bboxes * scale_factors
 
     objects = []
     for label, score, bbox in zip(pred_labels, pred_scores, pred_bboxes):
         class_label = id2label[int(label)]
-        if class_label != 'no object':
-            objects.append({
-                'label': class_label,
-                'score': float(score),
-                'bbox': bbox.tolist()
-            })
+        if class_label != "no object":
+            objects.append(
+                {"label": class_label, "score": float(score), "bbox": bbox.tolist()}
+            )
 
     return objects
 
+
 def detect_table_columns(image):
-    structure_model = TableTransformerForObjectDetection.from_pretrained(os.path.join(BASE_DIR,"models", "local_model"))
+    structure_model = TableTransformerForObjectDetection.from_pretrained(
+        os.path.join(BASE_DIR, "models", "local_model")
+    )
     # structure_model = TableTransformerForObjectDetection.from_pretrained("./local_model")
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     structure_model.to(device)
 
-    structure_transform = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-    ])
+    structure_transform = transforms.Compose(
+        [
+            transforms.ToTensor(),
+            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+        ]
+    )
 
     img_size = image.size
     pixel_values = structure_transform(image).unsqueeze(0).to(device)
@@ -858,9 +987,10 @@ def detect_table_columns(image):
     structure_id2label[len(structure_id2label)] = "no object"
 
     objects = outputs_to_objects(outputs, img_size, structure_id2label)
-    columns = [obj for obj in objects if obj['label'] == "table column"]
+    columns = [obj for obj in objects if obj["label"] == "table column"]
 
     return columns
+
 
 def plot_results(image, columns):
     plt.figure(figsize=(16, 10))
@@ -873,22 +1003,38 @@ def plot_results(image, columns):
         label = column["label"]
 
         xmin, ymin, xmax, ymax = tuple(bbox)
-        ax.add_patch(plt.Rectangle((xmin, ymin), xmax - xmin, ymax - ymin, fill=False, color="red", linewidth=2))
+        ax.add_patch(
+            plt.Rectangle(
+                (xmin, ymin),
+                xmax - xmin,
+                ymax - ymin,
+                fill=False,
+                color="red",
+                linewidth=2,
+            )
+        )
 
-        text = f'{label}: {score:0.2f}'
-        ax.text(xmin, ymin, text, fontsize=12, color='white',
-                bbox=dict(facecolor='red', alpha=0.5))
+        text = f"{label}: {score:0.2f}"
+        ax.text(
+            xmin,
+            ymin,
+            text,
+            fontsize=12,
+            color="white",
+            bbox=dict(facecolor="red", alpha=0.5),
+        )
 
-    plt.axis('off')
+    plt.axis("off")
     plt.show()
+
 
 def annotate_pdf(pdf_document, columns):
     rightmost_column = None
-    rightmost_xmax = float('-inf')
+    rightmost_xmax = float("-inf")
 
     # First pass: Identify the rightmost column in one go
     for column in columns:
-        bbox = column['bbox']
+        bbox = column["bbox"]
         xmax = bbox[2]  # Extract xmax
 
         # Identify the rightmost column
@@ -898,7 +1044,7 @@ def annotate_pdf(pdf_document, columns):
 
     # Cache the coordinates for the rightmost column
     if rightmost_column:
-        rightmost_bbox = rightmost_column['bbox']
+        rightmost_bbox = rightmost_column["bbox"]
         xmin_rightmost = rightmost_bbox[0]  # xmin of the rightmost column
         xmax_rightmost = rightmost_bbox[2]  # xmax of the rightmost column
 
@@ -910,7 +1056,7 @@ def annotate_pdf(pdf_document, columns):
 
         # Second pass: Draw the lines for all columns
         for column in columns:
-            bbox = column['bbox']
+            bbox = column["bbox"]
             xmin = bbox[0]  # Extract xmin
 
             # Draw the left side line (xmin) for each column
@@ -920,13 +1066,24 @@ def annotate_pdf(pdf_document, columns):
         # Draw the bounding box for the rightmost column
         if rightmost_column:
             # Draw the left side (xmin) of the rightmost column
-            page.draw_line((xmin_rightmost, 0), (xmin_rightmost, page_height), color=(1, 0, 0), width=1)
+            page.draw_line(
+                (xmin_rightmost, 0),
+                (xmin_rightmost, page_height),
+                color=(1, 0, 0),
+                width=1,
+            )
             # Draw the right side (xmax) of the rightmost column in blue
             list_of.append(xmax_rightmost)
-            page.draw_line((xmax_rightmost, 0), (xmax_rightmost, page_height), color=(0, 0, 1), width=1)
+            page.draw_line(
+                (xmax_rightmost, 0),
+                (xmax_rightmost, page_height),
+                color=(0, 0, 1),
+                width=1,
+            )
 
     lines = [x - 20 for x in list_of]
     return lines
+
 
 def process_pdf_and_annotate(pdf_path, output_pdf):
     images = pdf_to_images(pdf_path)
@@ -947,21 +1104,29 @@ def process_pdf_and_annotate(pdf_path, output_pdf):
 
     return output_pdf, first_page_columns, llama
 
+
 ##____________COLUMN SEPARATORS_______________________
+
 
 def clean_table(table):
     # Find the first row containing both 'date' and 'balance'/'total amount' or just 'balance'/'total amount'
-    start_index = table.apply(lambda row: (row.astype(str).str.contains("date", case=False).any() and
-                                           row.astype(str).str.contains("balance|total amount",
-                                                                        case=False).any()) or
-                                          row.astype(str).str.contains("balance|total amount", case=False).any(),
-                              axis=1).idxmax()
+    start_index = table.apply(
+        lambda row: (
+            row.astype(str).str.contains("date", case=False).any()
+            and row.astype(str).str.contains("balance|total amount", case=False).any()
+        )
+        or row.astype(str).str.contains("balance|total amount", case=False).any(),
+        axis=1,
+    ).idxmax()
 
     df = table.loc[start_index:] if start_index is not None else pd.DataFrame()
     # Remove columns where all values are empty strings or whitespace
-    cleaned_table = df.loc[:, ~(df.iloc[1:].apply(lambda col: (col.astype(str) == "None").all()))]
+    cleaned_table = df.loc[
+        :, ~(df.iloc[1:].apply(lambda col: (col.astype(str) == "None").all()))
+    ]
     cleaned_table.columns = range(cleaned_table.shape[1])
     return cleaned_table
+
 
 # Functions for handling test cases and transformations
 def extract_dataframe_from_pdf(page_path, table_settings):
@@ -981,6 +1146,7 @@ def extract_dataframe_from_pdf(page_path, table_settings):
     # w.to_excel(f"raw_dataframe_{rage_path}.xlsx")
     return w
 
+
 def extract_dataframe_from_full_pdf(pdf_path):
     pdf = pdfplumber.open(pdf_path)
     df_total = pd.DataFrame()
@@ -995,9 +1161,10 @@ def extract_dataframe_from_full_pdf(pdf_path):
 
     return w
 
+
 def cut_the_datframe_from_headers(df):
-    date_pattern = re.compile(r'\b(date|value date|value)\b', re.IGNORECASE)
-    balance_pattern = re.compile(r'\b(balance|total amount)\b', re.IGNORECASE)
+    date_pattern = re.compile(r"\b(date|value date|value)\b", re.IGNORECASE)
+    balance_pattern = re.compile(r"\b(balance|total amount)\b", re.IGNORECASE)
 
     crop_index = None
 
@@ -1042,43 +1209,47 @@ def validate_bank_statement(df, tolerance=2, raise_error=True):
     validated_df = df.copy()
 
     # Convert financial columns to numeric (handle strings, commas, currency symbols)
-    for col in ['Credit', 'Debit', 'Balance']:
+    for col in ["Credit", "Debit", "Balance"]:
         print("0")
         # First handle common formatting issues
-        if validated_df[col].dtype == 'object':
+        if validated_df[col].dtype == "object":
             # Remove currency symbols, commas, and spaces
-            validated_df[col] = validated_df[col].astype(str).str.replace('[$£€,\s]', '', regex=True)
+            validated_df[col] = (
+                validated_df[col].astype(str).str.replace("[$£€,\s]", "", regex=True)
+            )
             # Convert empty strings and non-numeric strings to NaN
-            validated_df[col] = pd.to_numeric(validated_df[col], errors='coerce')
+            validated_df[col] = pd.to_numeric(validated_df[col], errors="coerce")
             # Replace NaN with 0
             validated_df[col].fillna(0, inplace=True)
 
     # Create new columns
-    validated_df['Expected_Balance'] = 0.0
-    validated_df['Match'] = False
-    validated_df['Sign_Error'] = False
-    validated_df['Difference'] = 0.0
+    validated_df["Expected_Balance"] = 0.0
+    validated_df["Match"] = False
+    validated_df["Sign_Error"] = False
+    validated_df["Difference"] = 0.0
 
     # First row's expected balance is the same as its actual balance
     if len(validated_df) > 0:
-        validated_df.loc[0, 'Expected_Balance'] = validated_df.loc[0, 'Balance']
-        validated_df.loc[0, 'Match'] = True
+        validated_df.loc[0, "Expected_Balance"] = validated_df.loc[0, "Balance"]
+        validated_df.loc[0, "Match"] = True
 
     # Track the true expected balance (not affected by display errors)
-    true_expected_balance = validated_df.loc[0, 'Balance'] if len(validated_df) > 0 else 0.0
+    true_expected_balance = (
+        validated_df.loc[0, "Balance"] if len(validated_df) > 0 else 0.0
+    )
 
     # For each subsequent row, calculate expected balance
     for i in range(1, len(validated_df)):
-        credit = validated_df.loc[i, 'Credit']
-        debit = validated_df.loc[i, 'Debit']
-        actual_balance = validated_df.loc[i, 'Balance']
+        credit = validated_df.loc[i, "Credit"]
+        debit = validated_df.loc[i, "Debit"]
+        actual_balance = validated_df.loc[i, "Balance"]
 
         # Get date from the appropriate column
         try:
-            date = validated_df.loc[i, 'Value Date']
+            date = validated_df.loc[i, "Value Date"]
         except KeyError:
             try:
-                date = validated_df.loc[i, 'Date']
+                date = validated_df.loc[i, "Date"]
             except KeyError:
                 date = f"Row {i}"
 
@@ -1093,31 +1264,35 @@ def validate_bank_statement(df, tolerance=2, raise_error=True):
         actual_balance = round(actual_balance, 2)
 
         # Store the expected balance
-        validated_df.loc[i, 'Expected_Balance'] = true_expected_balance
+        validated_df.loc[i, "Expected_Balance"] = true_expected_balance
 
         # Calculate difference
         difference = abs(true_expected_balance - actual_balance)
-        validated_df.loc[i, 'Difference'] = difference
+        validated_df.loc[i, "Difference"] = difference
 
         # Check for match within tolerance
         if difference <= tolerance:
-            validated_df.loc[i, 'Match'] = True
+            validated_df.loc[i, "Match"] = True
         # Check for sign error (absolute values are close but signs differ)
-        elif abs(abs(true_expected_balance) - abs(
-                actual_balance)) <= tolerance and true_expected_balance * actual_balance <= 0:
-            validated_df.loc[i, 'Match'] = False
-            validated_df.loc[i, 'Sign_Error'] = True
+        elif (
+            abs(abs(true_expected_balance) - abs(actual_balance)) <= tolerance
+            and true_expected_balance * actual_balance <= 0
+        ):
+            validated_df.loc[i, "Match"] = False
+            validated_df.loc[i, "Sign_Error"] = True
             # No error raised for sign errors, just flagged in the dataframe
 
         # Otherwise, there's some other type of mismatch
         else:
-            validated_df.loc[i, 'Match'] = False
+            validated_df.loc[i, "Match"] = False
 
             if raise_error:
-                error_msg = (f"Balance mismatch at row {i} (Date: {date}): "
-                             f"Expected balance {true_expected_balance}, "
-                             f"Actual balance {actual_balance}. "
-                             f"Difference: {difference}")
+                error_msg = (
+                    f"Balance mismatch at row {i} (Date: {date}): "
+                    f"Expected balance {true_expected_balance}, "
+                    f"Actual balance {actual_balance}. "
+                    f"Difference: {difference}"
+                )
                 raise Exception(error_msg)
 
     return df
@@ -1174,15 +1349,15 @@ def model_for_pdf(df):
 
     if deb_column[0] == cred_column[0]:
         print("Credit and Debit are in the same column.")
-        result = credit_debit(df, description_column, date_column, bal_column, deb_column[0])
+        result = credit_debit(
+            df, description_column, date_column, bal_column, deb_column[0]
+        )
         final_df = cleaning(result)
     else:
         final_df = cleaning(new_df)
 
     if final_df.empty:
-        raise ValueError(
-            "Empty DF returned from extraction"
-        )
+        raise ValueError("Empty DF returned from extraction")
 
     print(final_df.head(10))
 
@@ -1221,25 +1396,34 @@ def new_mode_for_pdf(df, lists):
     print("Extraction is Over !!!!!!!!!!!")
     return final_df
 
+
 def old_bank_extraction(page_path):
     # Simulate old bank extraction process with the PDF page path
     print(f"Performing old bank extraction on {page_path}")
     pass
 
+
 # Function to add column separators (optimized to avoid file I/O)
 def add_column_separators_in_memory(page):
     CA_ID = "1234_temp"
     # Simulate adding column separators to the in-memory page
-    output_pdf, coordinates, llama = process_pdf_and_annotate(page, os.path.join(TEMP_SAVED_PDF_DIR,
-                                                                                      f"{CA_ID}_only_columns_add_{uuid.uuid4().hex}.pdf"))
+    output_pdf, coordinates, llama = process_pdf_and_annotate(
+        page,
+        os.path.join(
+            TEMP_SAVED_PDF_DIR, f"{CA_ID}_only_columns_add_{uuid.uuid4().hex}.pdf"
+        ),
+    )
     return output_pdf, coordinates, llama  # Return the modified page and coordinates
+
 
 def add_column_separators_with_coordinates(pdf_path, coordinates):
     CA_ID = "1234_temp"
     pdf_document = fitz.open(pdf_path)
     llama_2 = annotate_pdf(pdf_document, coordinates)
-    processed_pdf_path = os.path.join(TEMP_SAVED_PDF_DIR,
-                                      f"{CA_ID}_columns_adding_with_coordinates_{uuid.uuid4().hex}.pdf")
+    processed_pdf_path = os.path.join(
+        TEMP_SAVED_PDF_DIR,
+        f"{CA_ID}_columns_adding_with_coordinates_{uuid.uuid4().hex}.pdf",
+    )
     pdf_document.save(processed_pdf_path)
     return processed_pdf_path, llama_2
 
@@ -1248,20 +1432,26 @@ def add_column_separators_with_coordinates(pdf_path, coordinates):
 def run_test_case_A(page, explicit_lines):
     try:
         if explicit_lines == 0:
-            df = extract_dataframe_from_pdf(page, table_settings={
-                "vertical_strategy": "lines",
-                "horizontal_strategy": "lines",
-                "edge_min_length": 20,
-            })
+            df = extract_dataframe_from_pdf(
+                page,
+                table_settings={
+                    "vertical_strategy": "lines",
+                    "horizontal_strategy": "lines",
+                    "edge_min_length": 20,
+                },
+            )
             model_df, lists = model_for_pdf(df)  # Process the DataFrame
             return model_df, lists  # No coordinates for Test Case A
         else:
-            df = extract_dataframe_from_pdf(page, table_settings={
-                "vertical_strategy": "explicit",
-                "explicit_vertical_lines": explicit_lines,
-                "horizontal_strategy": "lines",
-                "intersection_x_tolerance": 20,
-            })
+            df = extract_dataframe_from_pdf(
+                page,
+                table_settings={
+                    "vertical_strategy": "explicit",
+                    "explicit_vertical_lines": explicit_lines,
+                    "horizontal_strategy": "lines",
+                    "intersection_x_tolerance": 20,
+                },
+            )
             model_df, lists = model_for_pdf(df)  # Process the DataFrame
             return model_df, lists  # No coordinates for Test Case A
 
@@ -1269,26 +1459,33 @@ def run_test_case_A(page, explicit_lines):
         print(f"Test Case A failed: {e}")
         return None, None
 
+
 # Optimized test case B
 def run_test_case_B(page_with_rows_added, explicit_lines):
     try:
         if explicit_lines == 0:
-            df = extract_dataframe_from_pdf(page_with_rows_added, table_settings={
-                "vertical_strategy": "lines",
-                "horizontal_strategy": "text",
-                "edge_min_length": 20,
-                "intersection_x_tolerance": 120
-            })
+            df = extract_dataframe_from_pdf(
+                page_with_rows_added,
+                table_settings={
+                    "vertical_strategy": "lines",
+                    "horizontal_strategy": "text",
+                    "edge_min_length": 20,
+                    "intersection_x_tolerance": 120,
+                },
+            )
             print(df.head(20))
             model_df, lists = model_for_pdf(df)  # Process the DataFrame
             return model_df, lists  # No coordinates for Test Case A
         else:
-            df = extract_dataframe_from_pdf(page_with_rows_added, table_settings={
-                "vertical_strategy": "explicit",
-                "explicit_vertical_lines": explicit_lines,
-                "horizontal_strategy": "text",
-                "intersection_x_tolerance": 120
-            })
+            df = extract_dataframe_from_pdf(
+                page_with_rows_added,
+                table_settings={
+                    "vertical_strategy": "explicit",
+                    "explicit_vertical_lines": explicit_lines,
+                    "horizontal_strategy": "text",
+                    "intersection_x_tolerance": 120,
+                },
+            )
             print(df.head(20))
             model_df, lists = model_for_pdf(df)
             return model_df, lists  # No coordinates for Test Case B
@@ -1296,41 +1493,51 @@ def run_test_case_B(page_with_rows_added, explicit_lines):
         print(f"Test Case B failed: {e}")
         return None, None
 
+
 # Optimized test case C
 def run_test_case_C(page_with_columns_added, explicit_lines):
     try:
-        df = extract_dataframe_from_pdf(page_with_columns_added, table_settings={
-            "vertical_strategy": "explicit",
-            "explicit_vertical_lines": explicit_lines,
-            "horizontal_strategy": "lines",
-            "intersection_x_tolerance": 120
-        })
+        df = extract_dataframe_from_pdf(
+            page_with_columns_added,
+            table_settings={
+                "vertical_strategy": "explicit",
+                "explicit_vertical_lines": explicit_lines,
+                "horizontal_strategy": "lines",
+                "intersection_x_tolerance": 120,
+            },
+        )
         model_df, lists = model_for_pdf(df)
         return model_df, lists  # Return coordinates for Test Case C
     except Exception as e:
         print(f"Test Case C failed: {e}")
         return None, None
 
+
 # Optimized test case D
 def run_test_case_D(page_with_rows_n_columns_added, explicit_lines):
     try:
-        df = extract_dataframe_from_pdf(page_with_rows_n_columns_added, table_settings={
-            "vertical_strategy": "explicit",
-            "explicit_vertical_lines": explicit_lines,
-            "horizontal_strategy": "text",
-            "intersection_x_tolerance": 120,
-        })
+        df = extract_dataframe_from_pdf(
+            page_with_rows_n_columns_added,
+            table_settings={
+                "vertical_strategy": "explicit",
+                "explicit_vertical_lines": explicit_lines,
+                "horizontal_strategy": "text",
+                "intersection_x_tolerance": 120,
+            },
+        )
         model_df, lists = model_for_pdf(df)
         return model_df, lists  # Return coordinates for Test Case C
     except Exception as e:
         print(f"Test Case D failed: {e}")
         return None, None
 
+
 def run_test_case_E(bank, pdf_path, timestamp, CA_ID):
     lists = 0
     df = pd.DataFrame()
     # df = customer.custom_extraction(bank, pdf_path, 0, timestamp)
     return df, lists
+
 
 def process_pdf_with_test_cases(pdf_path):
     print("Starting Test Case Processing...")
@@ -1378,7 +1585,9 @@ def process_pdf_with_test_cases(pdf_path):
         return ["C", 0, lists, explicit_lines_x]  # Test Case C passed
 
     # Test Case C
-    page_with_columns, coordinates_C, explicit_lines = add_column_separators_in_memory(page)
+    page_with_columns, coordinates_C, explicit_lines = add_column_separators_in_memory(
+        page
+    )
     model_df_C, lists = run_test_case_C(page_with_columns, explicit_lines)
     if model_df_C is not None:
         print("Test Case C passed")
@@ -1404,6 +1613,7 @@ def process_pdf_with_test_cases(pdf_path):
         print("Test Case E begins : MOVING TOWARDS CUSTOM EXTRACTION")
         return ["E", coordinates_C, lists, explicit_lines]
 
+
 def run_test_output_on_whole_pdf(list_a, pdf_in_saved_pdf, bank_name, timestamp, CA_ID):
     test_case = list_a[0]
     coordinates_C = list_a[1]
@@ -1414,75 +1624,94 @@ def run_test_output_on_whole_pdf(list_a, pdf_in_saved_pdf, bank_name, timestamp,
         # Run `extract_dataframe_from_pdf()` for Test Case A
         print("Running extract_dataframe_from_pdf() for Test Case A")
         if explicit_lines == 0:
-            df = extract_dataframe_from_pdf(pdf_in_saved_pdf, table_settings={
-                "vertical_strategy": "lines",
-                "horizontal_strategy": "lines",
-                "edge_min_length": 20,
-            })
+            df = extract_dataframe_from_pdf(
+                pdf_in_saved_pdf,
+                table_settings={
+                    "vertical_strategy": "lines",
+                    "horizontal_strategy": "lines",
+                    "edge_min_length": 20,
+                },
+            )
             model_df = new_mode_for_pdf(df, lists_of_columns)
             return model_df, None
         else:
-            df = extract_dataframe_from_pdf(pdf_in_saved_pdf, table_settings={
-                "vertical_strategy": "explicit",
-                "explicit_vertical_lines": explicit_lines,
-                "horizontal_strategy": "lines",
-                "intersection_x_tolerance": 20,
-            })
+            df = extract_dataframe_from_pdf(
+                pdf_in_saved_pdf,
+                table_settings={
+                    "vertical_strategy": "explicit",
+                    "explicit_vertical_lines": explicit_lines,
+                    "horizontal_strategy": "lines",
+                    "intersection_x_tolerance": 20,
+                },
+            )
             model_df = new_mode_for_pdf(df, lists_of_columns)
             return model_df, None
-
 
     elif test_case == "B":
         # Run `row_separators_addition()` for Test Case B
         print("Running row_separators_addition() for Test Case B")
         # pdf_in_rows_saved_pdf = self.add_row_separators_in_memory(pdf_in_saved_pdf)
         if explicit_lines == 0:
-            df = extract_dataframe_from_pdf(pdf_in_saved_pdf, table_settings={
-                "vertical_strategy": "lines",
-                "horizontal_strategy": "text",
-                "edge_min_length": 20,
-                "intersection_x_tolerance": 120
-            })
+            df = extract_dataframe_from_pdf(
+                pdf_in_saved_pdf,
+                table_settings={
+                    "vertical_strategy": "lines",
+                    "horizontal_strategy": "text",
+                    "edge_min_length": 20,
+                    "intersection_x_tolerance": 120,
+                },
+            )
             model_df = new_mode_for_pdf(df, lists_of_columns)
             return model_df, None
         else:
-            df = extract_dataframe_from_pdf(pdf_in_saved_pdf, table_settings={
-                "vertical_strategy": "explicit",
-                "explicit_vertical_lines": explicit_lines,
-                "horizontal_strategy": "text",
-                "intersection_x_tolerance": 120
-            })
+            df = extract_dataframe_from_pdf(
+                pdf_in_saved_pdf,
+                table_settings={
+                    "vertical_strategy": "explicit",
+                    "explicit_vertical_lines": explicit_lines,
+                    "horizontal_strategy": "text",
+                    "intersection_x_tolerance": 120,
+                },
+            )
             model_df = new_mode_for_pdf(df, lists_of_columns)
             return model_df, None
 
-
     elif test_case == "C":
         # Run `add_column_separators_with_coordinates()` for Test Case C
-        print(f"Running add_column_separators_with_coordinates() for Test Case C with coordinates {coordinates_C}")
+        print(
+            f"Running add_column_separators_with_coordinates() for Test Case C with coordinates {coordinates_C}"
+        )
         # pdf_in_columns_saved_pdf, explicit_lines = self.add_column_separators_with_coordinates(pdf_in_saved_pdf, coordinates_C)
-        df = extract_dataframe_from_pdf(pdf_in_saved_pdf, table_settings={
-            "vertical_strategy": "explicit",
-            "explicit_vertical_lines": explicit_lines,
-            "horizontal_strategy": "lines",
-            "intersection_x_tolerance": 120
-        })
+        df = extract_dataframe_from_pdf(
+            pdf_in_saved_pdf,
+            table_settings={
+                "vertical_strategy": "explicit",
+                "explicit_vertical_lines": explicit_lines,
+                "horizontal_strategy": "lines",
+                "intersection_x_tolerance": 120,
+            },
+        )
         model_df = new_mode_for_pdf(df, lists_of_columns)
         return model_df, None
 
     elif test_case == "D":
         # First add row separators, then column separators with coordinates for Test Case D
-        print("Running add_row_separators and add_column_separators_with_coordinates() for Test Case D")
+        print(
+            "Running add_row_separators and add_column_separators_with_coordinates() for Test Case D"
+        )
         # pdf_in_rows_saved_pdf = self.add_row_separators_in_memory(pdf_in_saved_pdf)
         # pdf_in_columns_saved_pdf, explicit_lines = self.add_column_separators_with_coordinates(pdf_in_saved_pdf, coordinates_C)
-        df = extract_dataframe_from_pdf(pdf_in_saved_pdf, table_settings={
-            "vertical_strategy": "explicit",
-            "explicit_vertical_lines": explicit_lines,
-            "horizontal_strategy": "text",
-            "intersection_x_tolerance": 120,
-        })
+        df = extract_dataframe_from_pdf(
+            pdf_in_saved_pdf,
+            table_settings={
+                "vertical_strategy": "explicit",
+                "explicit_vertical_lines": explicit_lines,
+                "horizontal_strategy": "text",
+                "intersection_x_tolerance": 120,
+            },
+        )
         model_df = new_mode_for_pdf(df, lists_of_columns)
         return model_df, None
-
 
     else:
         # Handle Test Case E
@@ -1490,7 +1719,9 @@ def run_test_output_on_whole_pdf(list_a, pdf_in_saved_pdf, bank_name, timestamp,
         df = pd.DataFrame()
         return df, explicit_lines
 
+
 import random
+
 
 def is_pdf_encoded(pdf_path):
     try:
@@ -1513,15 +1744,21 @@ def is_pdf_encoded(pdf_path):
     except Exception as e:
         return f"An unexpected error occurred: {e}"
 
+
 # Main function to run test cases with optimizations
 def extract_with_test_cases(bank_name, pdf_path, pdf_password, CA_ID):
     timestamp = "1234_temp"
-    pdf_in_saved_pdf = unlock_and_add_margins_to_pdf(pdf_path, pdf_password, timestamp, CA_ID)
+    pdf_in_saved_pdf = unlock_and_add_margins_to_pdf(
+        pdf_path, pdf_password, timestamp, CA_ID
+    )
     is_pdf_encoded(pdf_in_saved_pdf)
     list_test = process_pdf_with_test_cases(pdf_in_saved_pdf)
     text = extract_text_from_pdf(pdf_in_saved_pdf)
-    idf, explicit_lines = run_test_output_on_whole_pdf(list_test, pdf_in_saved_pdf, bank_name, timestamp, CA_ID)
+    idf, explicit_lines = run_test_output_on_whole_pdf(
+        list_test, pdf_in_saved_pdf, bank_name, timestamp, CA_ID
+    )
     return idf, text, explicit_lines
+
 
 #################################################
 # bank_name = "ABC"

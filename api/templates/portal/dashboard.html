@@ -1,0 +1,120 @@
+{% extends 'portal/base.html' %} {% block title %} Dashboard | Statement
+Analyzer {% endblock %} {% block content %}
+<div class="container mt-4">
+  <div class="row mb-4">
+    <div class="col">
+      <h1 class="h2 mb-0">Dashboard</h1>
+      <p class="text-muted">Welcome back, {{ user.username }}!</p>
+    </div>
+  </div>
+
+  <div class="row g-4">
+    <!-- API Keys Card -->
+    <div class="col-md-6">
+      <div class="card h-100 border-0 shadow-sm">
+        <div
+          class="card-header bg-white d-flex justify-content-between align-items-center"
+        >
+          <h5 class="card-title mb-0">API Keys</h5>
+          <a
+            href="{% url 'portal:api_keys' %}"
+            class="btn btn-sm btn-outline-primary"
+            >Manage Keys</a
+          >
+        </div>
+        <div class="card-body">
+          {% if api_keys %}
+          <div class="table-responsive">
+            <table class="table table-sm">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Status</th>
+                  <th>Created</th>
+                  <th>Expires</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for key in api_keys|slice:":3" %}
+                <tr>
+                  <td>{{ key.name }}</td>
+                  <td>
+                    {% if key.is_active and not key.is_expired %}
+                    <span class="badge bg-success">Active</span>
+                    {% elif key.is_expired %}
+                    <span class="badge bg-danger">Expired</span>
+                    {% else %}
+                    <span class="badge bg-secondary">Inactive</span>
+                    {% endif %}
+                  </td>
+                  <td>{{ key.created_at|date:"M d, Y" }}</td>
+                  <td>{{ key.expires_at|date:"M d, Y" }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% if api_keys.count > 3 %}
+          <div class="text-center mt-2">
+            <a href="{% url 'portal:api_keys' %}" class="btn btn-sm btn-link"
+              >View all {{ api_keys.count }} keys</a
+            >
+          </div>
+          {% endif %} {% else %}
+          <div class="text-center py-4">
+            <p>You don't have any API keys yet.</p>
+            <a href="{% url 'portal:api_keys' %}" class="btn btn-primary"
+              >Create API Key</a
+            >
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Quick Links Card -->
+    <div class="col-md-6">
+      <div class="card h-100 border-0 shadow-sm">
+        <div class="card-header bg-white">
+          <h5 class="card-title mb-0">Get Started</h5>
+        </div>
+        <div class="card-body">
+          <div class="d-grid gap-3">
+            <a
+              href="{% url 'portal:api_keys' %}"
+              class="btn btn-outline-primary"
+            >
+              <i class="bi bi-key-fill me-2"></i>Generate API Key
+            </a>
+            <a href="{% url 'portal:docs' %}" class="btn btn-outline-primary">
+              <i class="bi bi-book-fill me-2"></i>API Documentation
+            </a>
+            <a
+              href="/api/docs/"
+              class="btn btn-outline-primary"
+              target="_blank"
+            >
+              <i class="bi bi-code-slash me-2"></i>Swagger UI
+            </a>
+          </div>
+
+          <div class="card mt-4 bg-light">
+            <div class="card-body">
+              <h6 class="card-title">Quick Start</h6>
+              <ol class="ps-3">
+                <li>Generate an API key</li>
+                <li>Review the API documentation</li>
+                <li>Make your first API call</li>
+              </ol>
+              <div class="alert alert-info">
+                <i class="bi bi-info-circle me-2"></i>Need help? Check our
+                documentation for detailed examples.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

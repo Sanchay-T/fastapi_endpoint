@@ -1,0 +1,326 @@
+{% extends 'portal/base.html' %} {% block title %} API Keys | Statement Analyzer
+{% endblock %} {% block content %}
+<div class="container mt-4">
+  <!-- START DEBUG FORM -->
+  <form
+    method="post"
+    action="{% url 'portal:api_keys' %}"
+    class="mb-4 p-3 border bg-light"
+  >
+    <h5 class="text-danger">DEBUG FORM (TEMPORARY)</h5>
+    {% csrf_token %}
+    <div class="mb-3">
+      <label for="debugKeyName" class="form-label">Key Name (Debug)</label>
+      <input
+        type="text"
+        class="form-control"
+        id="debugKeyName"
+        name="name"
+        placeholder="Debug Key Name"
+      />
+    </div>
+    <div class="mb-3">
+      <label for="debugExpiresDays" class="form-label"
+        >Expires After (Debug)</label
+      >
+      <select class="form-select" id="debugExpiresDays" name="expires_days">
+        <option value="1">1 day</option>
+        <option value="365" selected>1 year</option>
+      </select>
+    </div>
+    <button type="submit" class="btn btn-danger">Submit Debug Form</button>
+  </form>
+  <!-- END DEBUG FORM -->
+
+  <div class="row mb-4">
+    <div class="col">
+      <h1 class="h2 mb-0">API Keys</h1>
+      <p class="text-muted">
+        Generate and manage your API keys for accessing the Bank Statement
+        Analyzer API
+      </p>
+    </div>
+    <div class="col-auto">
+      <button
+        type="button"
+        class="btn btn-primary"
+        data-bs-toggle="modal"
+        data-bs-target="#createKeyModal"
+      >
+        <i class="bi bi-plus-circle me-1"></i> New API Key
+      </button>
+    </div>
+  </div>
+
+  {% if messages %}
+  <div class="row">
+    <div class="col">
+      {% for message in messages %}
+      <div
+        class="alert alert-{{ message.tags }} alert-dismissible fade show"
+        role="alert"
+      >
+        {{ message }}
+        <button
+          type="button"
+          class="btn-close"
+          data-bs-dismiss="alert"
+          aria-label="Close"
+        ></button>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="card border-0 shadow-sm">
+    {% if api_keys %}
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>Name</th>
+            <th>Key</th>
+            <th>Created</th>
+            <th>Expires</th>
+            <th>Status</th>
+            <th class="text-end">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for key in api_keys %}
+          <tr>
+            <td>{{ key.name }}</td>
+            <td style="max-width: 300px">
+              <div class="input-group">
+                <input
+                  type="password"
+                  class="form-control form-control-sm api-key-field"
+                  id="key-{{ key.id }}"
+                  value="{{ key.key }}"
+                  readonly
+                />
+                <button
+                  class="btn btn-sm btn-outline-secondary toggle-password"
+                  type="button"
+                  data-target="key-{{ key.id }}"
+                >
+                  <i class="bi bi-eye"></i>
+                </button>
+                <button
+                  class="btn btn-sm btn-outline-secondary copy-to-clipboard"
+                  type="button"
+                  data-clipboard="{{ key.key }}"
+                >
+                  <i class="bi bi-clipboard"></i>
+                </button>
+              </div>
+            </td>
+            <td>{{ key.created_at|date:"M d, Y" }}</td>
+            <td>{{ key.expires_at|date:"M d, Y" }}</td>
+            <td>
+              {% if key.is_active and not key.is_expired %}
+              <span class="badge bg-success">Active</span>
+              {% elif key.is_expired %}
+              <span class="badge bg-danger">Expired</span>
+              {% else %}
+              <span class="badge bg-secondary">Inactive</span>
+              {% endif %}
+            </td>
+            <td class="text-end">
+              <div class="btn-group btn-group-sm">
+                <form
+                  method="post"
+                  action="{% url 'portal:toggle_key' key.id %}"
+                  style="display: inline"
+                >
+                  {% csrf_token %}
+                  <button
+                    type="submit"
+                    class="btn btn-sm btn-outline-{% if key.is_active %}warning{% else %}success{% endif %}"
+                  >
+                    {% if key.is_active %}
+                    <i class="bi bi-pause-fill"></i> Deactivate {% else %}
+                    <i class="bi bi-play-fill"></i> Activate {% endif %}
+                  </button>
+                </form>
+                <button
+                  type="button"
+                  class="btn btn-sm btn-outline-primary regenerate-key"
+                  data-bs-toggle="modal"
+                  data-bs-target="#regenerateKeyModal"
+                  data-key-id="{{ key.id }}"
+                  data-key-name="{{ key.name }}"
+                >
+                  <i class="bi bi-arrow-repeat"></i> Regenerate
+                </button>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="card-body text-center py-5">
+      <div class="mb-3">
+        <i class="bi bi-key text-muted" style="font-size: 3rem"></i>
+      </div>
+      <h5>No API Keys Yet</h5>
+      <p class="text-muted">
+        Create an API key to start using our API services.
+      </p>
+      <button
+        type="button"
+        class="btn btn-primary"
+        data-bs-toggle="modal"
+        data-bs-target="#createKeyModal"
+      >
+        <i class="bi bi-plus-circle me-1"></i> Create API Key
+      </button>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Information Card -->
+  <div class="card mt-4 border-0 shadow-sm bg-light">
+    <div class="card-body">
+      <h5>
+        <i class="bi bi-info-circle-fill text-primary me-2"></i>Using API Keys
+      </h5>
+      <p>Include your API key in the request header with every API call:</p>
+      <div class="bg-dark text-light p-3 rounded">
+        <code>Authorization: Bearer YOUR_API_KEY</code>
+      </div>
+      <div class="mt-3">
+        <a
+          href="{% url 'portal:docs' %}"
+          class="btn btn-sm btn-outline-primary"
+        >
+          <i class="bi bi-book me-1"></i> View API Documentation
+        </a>
+        <a
+          href="/api/docs/"
+          class="btn btn-sm btn-outline-primary"
+          target="_blank"
+        >
+          <i class="bi bi-code-slash me-1"></i> Interactive Swagger UI
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Create API Key Modal -->
+<div
+  class="modal fade"
+  id="createKeyModal"
+  tabindex="-1"
+  aria-labelledby="createKeyModalLabel"
+  aria-hidden="true"
+>
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="post" action="{% url 'portal:api_keys' %}">
+        {% csrf_token %}
+        <div class="modal-header">
+          <h5 class="modal-title" id="createKeyModalLabel">
+            Create New API Key
+          </h5>
+          <button
+            type="button"
+            class="btn-close"
+            data-bs-dismiss="modal"
+            aria-label="Close"
+          ></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label for="keyName" class="form-label">Key Name</label>
+            <input
+              type="text"
+              class="form-control"
+              id="keyName"
+              name="name"
+              placeholder="e.g., Production Key"
+            />
+            <div class="form-text">
+              Give your key a descriptive name to identify its purpose.
+            </div>
+          </div>
+          <div class="mb-3">
+            <label for="expiresDays" class="form-label">Expires After</label>
+            <select class="form-select" id="expiresDays" name="expires_days">
+              <option value="30">30 days</option>
+              <option value="90">90 days</option>
+              <option value="180">180 days</option>
+              <option value="365" selected>1 year</option>
+              <option value="730">2 years</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button
+            type="button"
+            class="btn btn-secondary"
+            data-bs-dismiss="modal"
+          >
+            Cancel
+          </button>
+          <button type="submit" class="btn btn-primary">Create API Key</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Regenerate API Key Modal -->
+<div
+  class="modal fade"
+  id="regenerateKeyModal"
+  tabindex="-1"
+  aria-labelledby="regenerateKeyModalLabel"
+  aria-hidden="true"
+>
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="post" action="" id="regenerateKeyForm">
+        {% csrf_token %}
+        <div class="modal-header">
+          <h5 class="modal-title" id="regenerateKeyModalLabel">
+            Regenerate API Key
+          </h5>
+          <button
+            type="button"
+            class="btn-close"
+            data-bs-dismiss="modal"
+            aria-label="Close"
+          ></button>
+        </div>
+        <div class="modal-body">
+          <div class="alert alert-warning">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+            <strong>Warning:</strong> Regenerating this key will invalidate the
+            previous key. Any applications using the old key will stop working
+            until updated.
+          </div>
+          <p>
+            Are you sure you want to regenerate the API key
+            <strong id="regenerateKeyName"></strong>?
+          </p>
+        </div>
+        <div class="modal-footer">
+          <button
+            type="button"
+            class="btn btn-secondary"
+            data-bs-dismiss="modal"
+          >
+            Cancel
+          </button>
+          <button type="submit" class="btn btn-warning">Regenerate Key</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

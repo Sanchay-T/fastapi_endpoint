@@ -1,0 +1,18 @@
+{% extends 'portal/base.html' %} {% block title %} Welcome | Statement Analyzer
+{% endblock %} {% block content %}
+<div class="text-center py-5">
+  <h1 class="display-5 fw-bold">Bank Statement Analyzer</h1>
+  <p class="lead">
+    Upload your bank statements, extract transactions, and receive ready-to-use
+    Excel reports via API.
+  </p>
+  <div class="d-grid gap-2 d-sm-flex justify-content-sm-center">
+    <a href="/accounts/signup/" class="btn btn-primary btn-lg px-4"
+      >Get Started</a
+    >
+    <a href="/api/docs/" class="btn btn-outline-secondary btn-lg px-4"
+      >API Docs</a
+    >
+  </div>
+</div>
+{% endblock %}

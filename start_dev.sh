@@ -27,9 +27,9 @@ source "${ACTIVATE_SCRIPT}"
 echo "Changing directory to ${API_DIR}..."
 cd "${API_DIR}" || exit
 
-echo "Starting Django development server..."
-python manage.py runserver_plus --cert-file local-cert.pem --key-file local-key.pem
+echo "Starting Django development server with SSL support..."
+python manage.py runserver_plus --cert-file local-cert.crt --key-file local-cert.key 0.0.0.0:8000
 
-# Optional: Deactivate environment when server stops (might not always work depending on how server exits)
+# Optional: Deactivate environment when server stops
 # echo "Deactivating environment..."
 # deactivate 

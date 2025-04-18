@@ -5,8 +5,9 @@ Production-ready configuration with all necessary settings.
 """
 
 import os
-from pathlib import Path
 from datetime import timedelta
+from pathlib import Path
+
 import dj_database_url
 from django.core.management.utils import get_random_secret_key
 
@@ -22,7 +23,7 @@ load_dotenv(os.path.join(os.path.dirname(BASE_DIR), ".env"))
 SECRET_KEY = os.environ.get("SECRET_KEY", get_random_secret_key())
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.environ.get("DEBUG", "False").lower() == "true"
+DEBUG = True
 
 ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
 
@@ -55,6 +56,7 @@ INSTALLED_APPS = [
     "django_extensions",  # Development utilities
     # Local apps
     "endpoints",
+    "portal",
 ]
 
 MIDDLEWARE = [
@@ -108,26 +110,23 @@ ASGI_APPLICATION = "backend.asgi.application"
 
 DATABASES = {
     "default": dj_database_url.config(
-        default=os.environ.get("DATABASE_URL", "sqlite:///" + os.path.join(BASE_DIR, "db.sqlite3")),
-        conn_max_age=600
+        default=os.environ.get(
+            "DATABASE_URL", "sqlite:///" + os.path.join(BASE_DIR, "db.sqlite3")
+        ),
+        conn_max_age=600,
     )
 }
 
 # Caching
 CACHES = {
     "default": {
-        "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": os.environ.get("REDIS_URL", "redis://127.0.0.1:6379/1"),
-        "OPTIONS": {
-            "CLIENT_CLASS": "django_redis.client.DefaultClient",
-            "IGNORE_EXCEPTIONS": True,
-        },
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "local-inmemory-cache",
     }
 }
 
 # Session settings
-SESSION_ENGINE = "django.contrib.sessions.backends.cache"
-SESSION_CACHE_ALIAS = "default"
+SESSION_ENGINE = "django.contrib.sessions.backends.db"
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
@@ -230,10 +229,11 @@ if not DEBUG:
 
 # Content Security Policy
 CSP_DEFAULT_SRC = ("'self'",)
-CSP_STYLE_SRC = ("'self'", "'unsafe-inline'")
-CSP_SCRIPT_SRC = ("'self'",)
-CSP_IMG_SRC = ("'self'", "data:")
-CSP_FONT_SRC = ("'self'", "data:")
+CSP_STYLE_SRC = ("'self'", "'unsafe-inline'", "cdn.jsdelivr.net", "*.bootstrapcdn.com")
+CSP_SCRIPT_SRC = ("'self'", "cdn.jsdelivr.net", "*.bootstrapcdn.com")
+CSP_IMG_SRC = ("'self'", "data:", "*")
+CSP_FONT_SRC = ("'self'", "data:", "cdn.jsdelivr.net", "*.bootstrapcdn.com")
+CSP_CONNECT_SRC = ("'self'", "*")
 
 # Django Defender settings
 DEFENDER_REDIS_URL = os.environ.get("REDIS_URL", "redis://127.0.0.1:6379/1")
@@ -251,6 +251,11 @@ USE_TZ = True
 STATIC_URL = "static/"
 STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
 STATICFILES_STORAGE = "django.contrib.staticfiles.storage.StaticFilesStorage"
+
+# Additional locations of static files
+STATICFILES_DIRS = [
+    os.path.join(BASE_DIR, "static"),
+]
 
 # Media files
 MEDIA_URL = "/media/"
@@ -340,8 +345,8 @@ DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", EMAIL_HOST_USER)
 # Sentry integration for error tracking
 if not DEBUG and os.environ.get("SENTRY_DSN"):
     import sentry_sdk
-    from sentry_sdk.integrations.django import DjangoIntegration
     from sentry_sdk.integrations.celery import CeleryIntegration
+    from sentry_sdk.integrations.django import DjangoIntegration
     from sentry_sdk.integrations.redis import RedisIntegration
 
     sentry_sdk.init(
@@ -359,3 +364,35 @@ if not DEBUG and os.environ.get("SENTRY_DSN"):
 # Create logs directory if it doesn't exist
 if not os.path.exists(os.path.join(BASE_DIR, "logs")):
     os.makedirs(os.path.join(BASE_DIR, "logs"))
+
+# --- Development overrides ---
+if DEBUG:
+    # Use in-memory cache and DB-backed sessions locally (no Redis requirement)
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "LOCATION": "local-dev",
+        }
+    }
+    SESSION_ENGINE = "django.contrib.sessions.backends.db"
+
+    # Remove CSP middleware to avoid blocking external CDNs during dev
+    MIDDLEWARE = [mw for mw in MIDDLEWARE if mw != "csp.middleware.CSPMiddleware"]
+
+# Authentication settings
+AUTH_USER_MODEL = "auth.User"
+LOGIN_REDIRECT_URL = "/portal/dashboard/"
+LOGOUT_REDIRECT_URL = "/portal/"
+ACCOUNT_EMAIL_VERIFICATION = "none"  # For development; set to "mandatory" in production
+
+# Django-allauth
+AUTHENTICATION_BACKENDS = [
+    # Django default
+    "django.contrib.auth.backends.ModelBackend",
+    # django-allauth
+    "allauth.account.auth_backends.AuthenticationBackend",
+]
+
+ACCOUNT_EMAIL_REQUIRED = True
+ACCOUNT_USERNAME_REQUIRED = True
+ACCOUNT_AUTHENTICATION_METHOD = "username_email"

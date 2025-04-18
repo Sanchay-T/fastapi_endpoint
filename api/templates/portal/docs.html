@@ -1,0 +1,300 @@
+{% extends 'portal/base.html' %} {% block title %} API Documentation | Statement
+Analyzer {% endblock %} {% block content %}
+<div class="container mt-4">
+  <div class="row mb-4">
+    <div class="col">
+      <h1 class="h2 mb-0">API Documentation</h1>
+      <p class="text-muted">Learn how to use the Bank Statement Analyzer API</p>
+    </div>
+    <div class="col-auto">
+      <a href="{{ swagger_url }}" class="btn btn-primary" target="_blank">
+        <i class="bi bi-box-arrow-up-right me-1"></i> Open Swagger UI
+      </a>
+    </div>
+  </div>
+
+  <!-- API Key Section -->
+  <div class="card border-0 shadow-sm mb-4">
+    <div class="card-header bg-white">
+      <h5 class="card-title mb-0">
+        <i class="bi bi-key me-2 text-primary"></i>Your API Keys
+      </h5>
+    </div>
+    <div class="card-body">
+      {% if api_keys %}
+      <p>Use one of your active API keys to authenticate your requests:</p>
+      <div class="table-responsive">
+        <table class="table table-sm">
+          <thead>
+            <tr>
+              <th>Key Name</th>
+              <th>API Key</th>
+              <th>Status</th>
+              <th>Expires</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for key in api_keys %}
+            <tr>
+              <td>{{ key.name }}</td>
+              <td>
+                <div class="input-group">
+                  <input
+                    type="password"
+                    class="form-control form-control-sm api-key-field"
+                    id="doc-key-{{ key.id }}"
+                    value="{{ key.key }}"
+                    readonly
+                  />
+                  <button
+                    class="btn btn-sm btn-outline-secondary toggle-password"
+                    type="button"
+                    data-target="doc-key-{{ key.id }}"
+                  >
+                    <i class="bi bi-eye"></i>
+                  </button>
+                  <button
+                    class="btn btn-sm btn-outline-secondary copy-to-clipboard"
+                    type="button"
+                    data-clipboard="{{ key.key }}"
+                  >
+                    <i class="bi bi-clipboard"></i>
+                  </button>
+                </div>
+              </td>
+              <td>
+                {% if key.is_active and not key.is_expired %}
+                <span class="badge bg-success">Active</span>
+                {% elif key.is_expired %}
+                <span class="badge bg-danger">Expired</span>
+                {% else %}
+                <span class="badge bg-secondary">Inactive</span>
+                {% endif %}
+              </td>
+              <td>{{ key.expires_at|date:"M d, Y" }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="text-end">
+        <a
+          href="{% url 'portal:api_keys' %}"
+          class="btn btn-sm btn-outline-primary"
+        >
+          <i class="bi bi-gear-fill me-1"></i> Manage Keys
+        </a>
+      </div>
+      {% else %}
+      <div class="alert alert-warning">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+        <strong>No API keys found.</strong> Please
+        <a href="{% url 'portal:api_keys' %}">create an API key</a> to access
+        the API.
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Authentication Section -->
+  <div class="card border-0 shadow-sm mb-4">
+    <div class="card-header bg-white">
+      <h5 class="card-title mb-0">
+        <i class="bi bi-shield-lock me-2 text-primary"></i>Authentication
+      </h5>
+    </div>
+    <div class="card-body">
+      <p>
+        All API requests require authentication using your API key. Include your
+        key in the <code>Authorization</code> header:
+      </p>
+
+      <div class="p-3 bg-light rounded mb-3">
+        <code>Authorization: Bearer YOUR_API_KEY</code>
+      </div>
+
+      <div class="mt-3">
+        <strong>Example request:</strong>
+        <pre
+          class="bg-dark text-light p-3 rounded"
+        ><code>curl -X POST {{ request.scheme }}://{{ request.get_host }}/api/v1/analyze-statements/ \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "bank_names": ["AXIS BANK"], 
+    "pdf_paths": ["/path/to/statement.pdf"],
+    "passwords": ["optional-password"],
+    "start_date": ["01-04-2021"],
+    "end_date": ["31-03-2022"],
+    "ca_id": "client123"
+  }'</code></pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- API Endpoints Section -->
+  <div class="card border-0 shadow-sm mb-4">
+    <div class="card-header bg-white">
+      <h5 class="card-title mb-0">
+        <i class="bi bi-code-slash me-2 text-primary"></i>API Endpoints
+      </h5>
+    </div>
+    <div class="card-body">
+      <div class="accordion" id="endpointsAccordion">
+        <!-- Analyze Statements Endpoint -->
+        <div class="accordion-item">
+          <h2 class="accordion-header" id="headingAnalyze">
+            <button
+              class="accordion-button"
+              type="button"
+              data-bs-toggle="collapse"
+              data-bs-target="#collapseAnalyze"
+              aria-expanded="true"
+              aria-controls="collapseAnalyze"
+            >
+              <span class="badge bg-success me-2">POST</span>
+              /api/v1/analyze-statements/
+            </button>
+          </h2>
+          <div
+            id="collapseAnalyze"
+            class="accordion-collapse collapse show"
+            aria-labelledby="headingAnalyze"
+            data-bs-parent="#endpointsAccordion"
+          >
+            <div class="accordion-body">
+              <p>
+                Analyze bank statements from PDF files. Returns extracted
+                transactions and other data.
+              </p>
+
+              <h6 class="mt-3 mb-2">Request Body:</h6>
+              <pre class="bg-light p-3 rounded"><code>{
+  "bank_names": ["AXIS BANK"],  // Array of bank names
+  "pdf_paths": ["/path/to/statement.pdf"],  // Array of PDF file paths
+  "passwords": ["password"],  // Optional array of PDF passwords
+  "start_date": ["01-04-2021"],  // Array of statement start dates
+  "end_date": ["31-03-2022"],  // Array of statement end dates
+  "ca_id": "client123"  // Client/Case ID
+}</code></pre>
+
+              <h6 class="mt-3 mb-2">Response:</h6>
+              <pre class="bg-light p-3 rounded"><code>{
+  "status": "success",
+  "message": "Bank statements analyzed successfully",
+  "data": {
+    "Transactions": [
+      {"Date": "2021-04-01", "Description": "...", "Amount": 1000.00, ...},
+      // More transactions
+    ]
+  },
+  "pdf_paths_not_extracted": [],
+  "ner_results": {
+    "Name": ["Account Holder Name"],
+    "Acc Number": ["XXXXXXXXXXXX"]
+  }
+}</code></pre>
+            </div>
+          </div>
+        </div>
+
+        <!-- Excel Download Endpoint -->
+        <div class="accordion-item">
+          <h2 class="accordion-header" id="headingExcel">
+            <button
+              class="accordion-button collapsed"
+              type="button"
+              data-bs-toggle="collapse"
+              data-bs-target="#collapseExcel"
+              aria-expanded="false"
+              aria-controls="collapseExcel"
+            >
+              <span class="badge bg-success me-2">POST</span>
+              /api/v1/excel-download/
+            </button>
+          </h2>
+          <div
+            id="collapseExcel"
+            class="accordion-collapse collapse"
+            aria-labelledby="headingExcel"
+            data-bs-parent="#endpointsAccordion"
+          >
+            <div class="accordion-body">
+              <p>
+                Generate and download an Excel file from transaction data.
+                Returns the Excel file as a download.
+              </p>
+
+              <h6 class="mt-3 mb-2">Request Body:</h6>
+              <pre class="bg-light p-3 rounded"><code>{
+  "transaction_data": [
+    {"Date": "2021-04-01", "Description": "...", "Amount": 1000.00, ...}
+    // More transactions
+  ],
+  "name_n_num": [
+    {"Name": "Account Holder", "Acc Number": "XXXXXXXXXXXX"}
+    // More account holders
+  ],
+  "case_name": "client_analysis"
+}</code></pre>
+
+              <h6 class="mt-3 mb-2">Response:</h6>
+              <p>
+                Excel file download with Content-Type:
+                <code
+                  >application/vnd.openxmlformats-officedocument.spreadsheetml.sheet</code
+                >
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="text-center mb-4">
+    <p>
+      For detailed API documentation and an interactive experience, use Swagger
+      UI:
+    </p>
+    <a href="{{ swagger_url }}" class="btn btn-lg btn-primary" target="_blank">
+      <i class="bi bi-code-square me-2"></i> Open Swagger UI
+    </a>
+  </div>
+</div>
+{% endblock %} {% block extra_js %}
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    // Toggle password visibility
+    document.querySelectorAll(".toggle-password").forEach((button) => {
+      button.addEventListener("click", function () {
+        const targetId = this.getAttribute("data-target");
+        const inputField = document.getElementById(targetId);
+
+        if (inputField.type === "password") {
+          inputField.type = "text";
+          this.innerHTML = '<i class="bi bi-eye-slash"></i>';
+        } else {
+          inputField.type = "password";
+          this.innerHTML = '<i class="bi bi-eye"></i>';
+        }
+      });
+    });
+
+    // Copy to clipboard
+    document.querySelectorAll(".copy-to-clipboard").forEach((button) => {
+      button.addEventListener("click", function () {
+        const textToCopy = this.getAttribute("data-clipboard");
+        navigator.clipboard.writeText(textToCopy).then(() => {
+          // Change icon temporarily
+          const originalHTML = this.innerHTML;
+          this.innerHTML = '<i class="bi bi-check2"></i>';
+          setTimeout(() => {
+            this.innerHTML = originalHTML;
+          }, 2000);
+        });
+      });
+    });
+  });
+</script>
+{% endblock %}

@@ -3,15 +3,15 @@ __pycache__/
 env/
 tax_professional/
 
-# Ignore individual files
-CA_Category_sheet.xlsx
-code_for_extraction.py
-common_functions.py
-gather_info.py
-main.py
-main.spec
-old_bank_extractions.py
-report.md
-requirements.txt
-test_endpoint.py
-tree.py
+# # Ignore individual files
+# CA_Category_sheet.xlsx
+# code_for_extraction.py
+# common_functions.py
+# gather_info.py
+# main.py
+# main.spec
+# old_bank_extractions.py
+# report.md
+# requirements.txt
+# test_endpoint.py
+# tree.py
